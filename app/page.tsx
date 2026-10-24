@@ -28,6 +28,8 @@ import {
   Maximize2,
   Minimize2,
   Edit3,
+  MoreHorizontal,
+  Share2,
   Image as ImageIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,6 +130,9 @@ export default function FusionWallpapersApp() {
   const [imageDimensions, setImageDimensions] = useState<{ isWide: boolean; aspectRatio: number }>({ isWide: false, aspectRatio: 9 / 16 });
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
+  // 3-Dot Menu Popup State
+  const [menuOpenWallpaperId, setMenuOpenWallpaperId] = useState<string | null>(null);
+
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<{ id: string; type: "success" | "error"; message: string } | null>(null);
 
@@ -196,6 +201,13 @@ export default function FusionWallpapersApp() {
 
     return () => subscription.unsubscribe();
   }, [supabase]);
+
+  // Close 3-dot menu on outside click
+  useEffect(() => {
+    const handleClickOutside = () => setMenuOpenWallpaperId(null);
+    window.addEventListener("click", handleClickOutside);
+    return () => window.removeEventListener("click", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     if (resendCooldown <= 0) return;
@@ -477,6 +489,29 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  const handleShareWallpaper = async (e: React.MouseEvent, wallpaper: Wallpaper) => {
+    e.stopPropagation();
+    setMenuOpenWallpaperId(null);
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: wallpaper.title,
+          text: `Check out this amazing wallpaper: ${wallpaper.title}`,
+          url: wallpaper.image_url,
+        });
+      } catch (err) {
+        // User cancelled share
+      }
+    } else {
+      try {
+        await navigator.clipboard.writeText(wallpaper.image_url);
+        alert("Wallpaper link copied to clipboard!");
+      } catch (err) {
+        alert("Could not share link.");
+      }
+    }
+  };
+
   const handleSaveAccountSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || settingsLoading) return;
@@ -555,6 +590,7 @@ export default function FusionWallpapersApp() {
 
   const handleAdminDelete = async (e: React.MouseEvent, wallpaper: Wallpaper) => {
     e.stopPropagation();
+    setMenuOpenWallpaperId(null);
     if (!isAdmin) return;
     if (!window.confirm(`Delete "${wallpaper.title}" permanently?`)) return;
 
@@ -604,7 +640,6 @@ export default function FusionWallpapersApp() {
          if (getWallpaperCategory(item) !== selectedExploreCategory) return false;
       }
 
-      // Pinterest Filter Pill behavior on Home tab
       if (activeTab === "home" && selectedPillCategory !== "All") {
         const catId = animeCategories.find(c => c.name === selectedPillCategory)?.id;
         if (getWallpaperCategory(item) !== catId) return false;
@@ -635,19 +670,22 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
+  // --- PINTEREST UI CARD (3-DOT MENU, NO CORNER BUTTONS, TITLE BELOW) ---
   const renderWallpaperCard = (item: Wallpaper, options?: { showRemoveSavedBtn?: boolean }) => {
     const isSaved = savedIds.includes(item.id);
     const ratio = imageRatios[item.id];
     const isTall = ratio !== undefined && ratio <= 0.57;
+    const isMenuOpen = menuOpenWallpaperId === item.id;
 
     return (
       <div
         key={item.id}
-        onClick={() => openWallpaperDetail(item)}
-        className="break-inside-avoid group relative rounded-3xl overflow-hidden bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] cursor-pointer transition-all duration-300 hover:border-white/30 hover:shadow-[0_0_25px_rgba(255,255,255,0.15)] mb-3.5 active:scale-95 transition-transform"
+        className="break-inside-avoid mb-4 group relative flex flex-col"
       >
+        {/* Wallpaper Image Container */}
         <div
-          className={`relative w-full overflow-hidden bg-black/40 flex items-center justify-center transition-all ${isTall ? "aspect-[9/16]" : ""}`}
+          onClick={() => openWallpaperDetail(item)}
+          className={`relative w-full overflow-hidden rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] cursor-pointer transition-all duration-300 hover:border-white/30 hover:shadow-[0_0_25px_rgba(255,255,255,0.15)] active:scale-95 transition-transform ${isTall ? "aspect-[9/16]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
@@ -662,34 +700,81 @@ export default function FusionWallpapersApp() {
             onContextMenu={(e) => e.preventDefault()}
             className={`w-full block pointer-events-none select-none transition-transform duration-500 group-hover:scale-105 ${isTall ? "h-full object-cover" : "h-auto object-cover"}`}
           />
-
           <div className="absolute inset-0 z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+        </div>
 
-          <button
-            type="button"
-            aria-label={isSaved ? "Remove from saved" : "Save wallpaper"}
-            onClick={(e) => toggleSaveWallpaper(e, item)}
-            className="absolute top-3 right-3 z-20 h-9 w-9 rounded-full bg-black/45 backdrop-blur-xl border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition active:scale-90"
-          >
-            <Bookmark className={`h-4 w-4 transition ${isSaved ? "fill-white text-white" : "text-white"}`} />
-          </button>
+        {/* Title Below Wallpaper + 3-Dot Menu Button (Pinterest Style) */}
+        <div className="mt-2.5 px-1 flex items-center justify-between relative">
+          <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate max-w-[80%]">
+            {item.title}
+          </h3>
 
-          {isAdmin && !options?.showRemoveSavedBtn && (
+          <div className="relative">
             <button
               type="button"
-              aria-label="Delete wallpaper"
-              onClick={(e) => handleAdminDelete(e, item)}
-              className="absolute top-3 left-3 z-20 h-9 w-9 rounded-full bg-red-950/75 backdrop-blur-xl border border-red-400/30 flex items-center justify-center text-red-300 hover:bg-red-900 transition active:scale-90"
+              aria-label="Wallpaper options"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpenWallpaperId(isMenuOpen ? null : item.id);
+              }}
+              className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/15 flex items-center justify-center text-white transition active:scale-90"
             >
-              <Trash2 className="h-4 w-4" />
+              <MoreHorizontal className="h-4 w-4" />
             </button>
-          )}
 
-          {/* Liquid Glass Title Pill Over Image (Pinterest Style) */}
-          <div className="absolute bottom-3 left-3 right-3 z-20 flex justify-center">
-            <div className="px-4 py-1.5 rounded-full bg-black/50 backdrop-blur-xl border border-white/15 text-xs font-medium text-white shadow-lg tracking-wide truncate max-w-full">
-              {item.title}
-            </div>
+            {/* LIQUID GLASS 3-DOT POPUP MENU */}
+            {isMenuOpen && (
+              <div 
+                className="absolute right-0 bottom-10 z-40 w-44 rounded-2xl bg-[#121212]/90 backdrop-blur-2xl border border-white/20 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 duration-150"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpenWallpaperId(null);
+                    toggleSaveWallpaper(null, item);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                >
+                  <Bookmark className={`h-4 w-4 ${isSaved ? "fill-white text-white" : ""}`} />
+                  <span>{isSaved ? "Saved" : "Save"}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => handleShareWallpaper(e, item)}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                >
+                  <Share2 className="h-4 w-4" />
+                  <span>Share</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpenWallpaperId(null);
+                    triggerDirectDownload(item);
+                  }}
+                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                >
+                  <Download className="h-4 w-4" />
+                  <span>Download</span>
+                </button>
+
+                {isAdmin && (
+                  <button
+                    type="button"
+                    onClick={(e) => handleAdminDelete(e, item)}
+                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-red-400 hover:bg-red-950/40 transition active:scale-95 border-t border-white/10 mt-1 pt-1.5"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    <span>Delete</span>
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -704,10 +789,9 @@ export default function FusionWallpapersApp() {
       className="min-h-screen bg-[#070707] text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Ambient Lighting Glow */}
       <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[250px] bg-white/5 blur-[130px] rounded-full z-0" />
 
-      {/* ================= STICKY LIQUID GLASS HEADER ================= */}
+      {/* ================= HEADER ================= */}
       <header className="sticky top-0 z-30 bg-[#070707]/80 backdrop-blur-2xl px-4 pt-4 pb-3 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
@@ -719,7 +803,6 @@ export default function FusionWallpapersApp() {
             }}
             className="flex items-center gap-3 text-left focus:outline-none group active:scale-95 transition-transform"
           >
-            {/* Logo Badge */}
             <div className="h-10 w-10 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center overflow-hidden shadow-[0_0_15px_rgba(255,255,255,0.15)] group-hover:border-white/40 transition">
               <img
                 src="/logo.png"
@@ -789,7 +872,6 @@ export default function FusionWallpapersApp() {
             ) : null}
           </div>
 
-          {/* Pinterest Filter Pills on Home Tab */}
           {activeTab === "home" && !searchQuery && (
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-1 pb-1">
               {["All", ...animeCategories.map(c => c.name)].map((pillName) => {
@@ -816,7 +898,7 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= MAIN CONTENT AREA ================= */}
+      {/* ================= CONTENT AREA ================= */}
       {activeTab === "profile" ? (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-12 z-10">
           {user ? (
@@ -898,7 +980,6 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
-        /* ================= EXPLORE PAGE: TWO PER ROW ANIME CATEGORY GRID ================= */
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-10">
           {exploreView === "grid" ? (
             <div className="space-y-5 pt-2">
@@ -907,7 +988,6 @@ export default function FusionWallpapersApp() {
                 <h2 className="text-lg font-bold text-white tracking-wide">Explore Anime</h2>
               </div>
               
-              {/* TWO PER ROW GRID */}
               <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 {animeCategories.map((cat) => {
                   const catWallpapers = wallpapers.filter(w => getWallpaperCategory(w) === cat.id);
@@ -972,7 +1052,6 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : (
-        /* ================= HOME & SEARCH GALLERY ================= */
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10">
           {activeTab === "saved" && (
             <div className="mb-4 flex items-center justify-between">
@@ -1013,7 +1092,7 @@ export default function FusionWallpapersApp() {
         </main>
       )}
 
-      {/* ================= FLOATING LIQUID GLASS BOTTOM NAVIGATION ================= */}
+      {/* ================= FLOATING BOTTOM NAVIGATION ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
         className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-md rounded-full bg-black/60 backdrop-blur-2xl border border-white/20 px-6 py-2.5 shadow-[0_15px_40px_rgba(0,0,0,0.9),0_0_25px_rgba(255,255,255,0.1)]"
@@ -1041,7 +1120,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN ================= */}
+      {/* ================= WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1120,7 +1199,6 @@ export default function FusionWallpapersApp() {
               <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">{selectedWallpaper.title}</h2>
             </div>
 
-            {/* ACTION BUTTONS WITH SPRING BOUNCE */}
             <div className="mt-5 flex flex-col gap-3.5 w-full">
               <Button
                 type="button"
@@ -1186,7 +1264,7 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= ITEM 4: POLISHED AUTHENTICATION MODAL ================= */}
+      {/* ================= AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
         <DialogContent className="bg-[#121212]/95 backdrop-blur-3xl border border-white/20 text-white sm:max-w-md rounded-3xl p-6 shadow-[0_25px_70px_rgba(0,0,0,0.9)]">
           <DialogHeader>
