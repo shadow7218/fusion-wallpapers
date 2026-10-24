@@ -30,6 +30,8 @@ import {
   RefreshCw,
   AlertCircle,
   CheckCircle2,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,7 +65,6 @@ interface PendingIntent {
   wallpaper?: Wallpaper;
 }
 
-// Clean, distinct Auth Steps (Separates Sign In, Sign Up, Forgot Password, and Password Reset)
 type AuthStep =
   | "SIGN_IN"
   | "SIGN_UP"
@@ -111,7 +112,6 @@ function FourPointStar({ className }: { className?: string }) {
   );
 }
 
-// Helper to mask email addresses (e.g., "ank***@gmail.com")
 function maskEmailAddress(email?: string | null): string {
   if (!email || !email.includes("@")) return "user***@fusion.app";
   const [local, domain] = email.split("@");
@@ -121,7 +121,6 @@ function maskEmailAddress(email?: string | null): string {
   return `${local.slice(0, 3)}***@${domain}`;
 }
 
-// Friendly error translator to catch "email rate limit exceeded" and raw Supabase errors
 function formatSupabaseAuthError(err: any): string {
   const msg = (err?.message || "").toLowerCase();
   if (msg.includes("rate limit") || err?.status === 429) {
@@ -136,7 +135,6 @@ function formatSupabaseAuthError(err: any): string {
   return err?.message || "Authentication failed. Please try again.";
 }
 
-// Extract category helper for legacy and new wallpapers
 function getWallpaperCategory(w: Wallpaper): string {
   if (w.category && w.category.trim() !== "") return w.category;
   const prefix = w.storage_path.split("-")[0]?.toLowerCase();
@@ -152,19 +150,16 @@ export default function FusionWallpapersApp() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
 
-  // --- CORE DATA STATE ---
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // --- USER & PROFILE STATE ---
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [savingInProgressIds, setSavingInProgressIds] = useState<string[]>([]);
   const [revealFullEmail, setRevealFullEmail] = useState<boolean>(false);
 
-  // --- NAVIGATION & VIEW STATE ---
   const [activeTab, setActiveTab] = useState<
     "home" | "explore" | "saved" | "profile"
   >("home");
@@ -173,9 +168,14 @@ export default function FusionWallpapersApp() {
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(
     null
   );
+  const [isWideExpanded, setIsWideExpanded] = useState<boolean>(false);
+  const [imageDimensions, setImageDimensions] = useState<{
+    isWide: boolean;
+    aspectRatio: number;
+  }>({ isWide: false, aspectRatio: 9 / 16 });
+
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
-  // --- DOWNLOAD STATE ---
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<{
     id: string;
@@ -183,7 +183,6 @@ export default function FusionWallpapersApp() {
     message: string;
   } | null>(null);
 
-  // --- AUTHENTICATION MODAL & FLOW STATE ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
   const [authStep, setAuthStep] = useState<AuthStep>("SIGN_IN");
   const [authReason, setAuthReason] = useState<string>(
@@ -201,7 +200,6 @@ export default function FusionWallpapersApp() {
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState<number>(0);
 
-  // --- ACCOUNT SETTINGS MODAL STATE ---
   const [isSettingsModalOpen, setIsSettingsModalOpen] =
     useState<boolean>(false);
   const [editDisplayName, setEditDisplayName] = useState<string>("");
@@ -214,7 +212,6 @@ export default function FusionWallpapersApp() {
     text: string;
   } | null>(null);
 
-  // --- ADMIN UPLOAD MODAL STATE ---
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [uploadTitle, setUploadTitle] = useState<string>("");
   const [uploadCategory, setUploadCategory] = useState<string>("Anime");
@@ -223,7 +220,6 @@ export default function FusionWallpapersApp() {
 
   const isAdmin = user?.id === ADMIN_UUID;
 
-  // --- 1. INITIALIZATION & SESSION LISTENER ---
   useEffect(() => {
     const init = async () => {
       await fetchWallpapers();
@@ -248,7 +244,6 @@ export default function FusionWallpapersApp() {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
 
-      // If user clicked a password reset link in their email, open the Set New Password dialog!
       if (event === "PASSWORD_RECOVERY") {
         setAuthStep("UPDATE_PASSWORD");
         setAuthError(null);
@@ -273,7 +268,6 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Cooldown timer for password reset resend
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setInterval(() => {
@@ -282,7 +276,6 @@ export default function FusionWallpapersApp() {
     return () => clearInterval(timer);
   }, [resendCooldown]);
 
-  // Browser back button support for closing the Wallpaper Detail screen cleanly
   useEffect(() => {
     const handlePopState = () => {
       if (selectedWallpaper) {
@@ -293,6 +286,25 @@ export default function FusionWallpapersApp() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectedWallpaper]);
 
+  // Measure image dimensions to determine if it is wider/longer than 9:16
+  useEffect(() => {
+    if (!selectedWallpaper) {
+      setIsWideExpanded(false);
+      return;
+    }
+    const img = new Image();
+    img.src = selectedWallpaper.image_url;
+    img.onload = () => {
+      const width = img.naturalWidth;
+      const height = img.naturalHeight;
+      const ratio = width / height;
+      // Standard vertical 9:16 ratio is ~0.5625. If ratio > 0.58, it's wider/longer than strict 9:16
+      const standardVerticalRatio = 9 / 16;
+      const isWide = ratio > standardVerticalRatio + 0.02;
+      setImageDimensions({ isWide, aspectRatio: ratio });
+    };
+  }, [selectedWallpaper]);
+
   const openWallpaperDetail = (wallpaper: Wallpaper) => {
     if (!selectedWallpaper) {
       window.history.pushState({ wallpaperId: wallpaper.id }, "");
@@ -300,6 +312,7 @@ export default function FusionWallpapersApp() {
     setSelectedWallpaper(wallpaper);
     setRelatedVisibleCount(6);
     setDownloadStatus(null);
+    setIsWideExpanded(false);
     if (detailScrollRef.current) {
       detailScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -308,9 +321,9 @@ export default function FusionWallpapersApp() {
   const closeWallpaperDetail = () => {
     setSelectedWallpaper(null);
     setDownloadStatus(null);
+    setIsWideExpanded(false);
   };
 
-  // --- 2. DATABASE FETCH HELPERS ---
   const fetchWallpapers = async () => {
     setLoading(true);
     setFetchError(null);
@@ -361,7 +374,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 3. PROMPT AUTH MODAL & RESUME PENDING INTENT ---
   const requireAuthForAction = (
     reason: string,
     intent: PendingIntent,
@@ -393,11 +405,9 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 4. FIXED AUTHENTICATION HANDLERS (SIGN IN, SIGN UP, FORGOT PASSWORD) ---
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-  // A. Returning User Sign In (Zero emails sent -> Never hits email rate limit!)
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
@@ -431,7 +441,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // B. New User Sign Up (Uses standard signUp instead of double-triggering signInWithOtp)
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
@@ -461,7 +470,6 @@ export default function FusionWallpapersApp() {
 
       if (error) throw error;
 
-      // Case 1: "Confirm email" is OFF in Supabase -> session is returned immediately!
       if (data.session && data.user) {
         const defaultName = cleanEmail.split("@")[0] || "Fusion Explorer";
         await supabase
@@ -476,7 +484,6 @@ export default function FusionWallpapersApp() {
         return;
       }
 
-      // Case 2: "Confirm email" is ON in Supabase -> ask user to click confirmation link in email
       setAuthPassword("");
       setAuthConfirmPassword("");
       setAuthStep("SIGN_IN");
@@ -490,7 +497,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // C. Dedicated Forgot Password Handler (Calls resetPasswordForEmail instead of OTP signup!)
   const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading || resendCooldown > 0) return;
@@ -526,7 +532,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // D. Complete Password Recovery (When user returns via email reset link)
   const handleUpdateRecoveredPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
@@ -569,7 +574,6 @@ export default function FusionWallpapersApp() {
     setIsSettingsModalOpen(false);
   };
 
-  // --- 5. PERSISTENT SAVE / BOOKMARK LOGIC (OPTIMISTIC + ROLLBACK) ---
   const toggleSaveWallpaper = async (
     e: React.MouseEvent | null,
     wallpaper: Wallpaper,
@@ -591,7 +595,6 @@ export default function FusionWallpapersApp() {
     const currentlySaved = savedIds.includes(wallpaper.id);
     setSavingInProgressIds((prev) => [...prev, wallpaper.id]);
 
-    // Optimistic UI update
     setSavedIds((prev) =>
       currentlySaved
         ? prev.filter((id) => id !== wallpaper.id)
@@ -617,7 +620,6 @@ export default function FusionWallpapersApp() {
         if (error) throw error;
       }
     } catch (err) {
-      // Rollback on failure
       setSavedIds((prev) =>
         currentlySaved
           ? [wallpaper.id, ...prev]
@@ -630,7 +632,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 6. ORIGINAL RESOLUTION DOWNLOAD LOGIC ---
   const triggerDirectDownload = async (
     wallpaper: Wallpaper,
     overrideUser?: User | null
@@ -716,7 +717,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 7. ACCOUNT SETTINGS UPDATE HANDLER ---
   const handleSaveAccountSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!user || settingsLoading) return;
@@ -767,7 +767,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 8. ADMIN UPLOAD & DELETE HANDLERS (PRESERVED) ---
   const handleAdminUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin || !uploadFile || !uploadTitle.trim() || uploading) return;
@@ -847,7 +846,6 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 9. COMPUTED GALLERIES (MAIN, SAVED, & RELATED WALLPAPERS) ---
   const filteredWallpapers = useMemo(() => {
     return wallpapers.filter((item) => {
       if (activeTab === "saved" && !savedIds.includes(item.id)) {
@@ -902,7 +900,6 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
-  // --- REUSABLE WALLPAPER CARD (IMAGE + NAME ONLY) ---
   const renderWallpaperCard = (
     item: Wallpaper,
     options?: { showRemoveSavedBtn?: boolean }
@@ -912,10 +909,10 @@ export default function FusionWallpapersApp() {
       <div
         key={item.id}
         onClick={() => openWallpaperDetail(item)}
-        className="break-inside-avoid group relative rounded-2xl overflow-hidden bg-[#0E1730] border border-blue-400/25 shadow-[0_8px_25px_rgba(0,0,0,0.6)] cursor-pointer transition-all duration-300 hover:border-cyan-400/70 hover:shadow-[0_0_22px_rgba(56,189,248,0.22)]"
+        className="break-inside-avoid group relative rounded-2xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_8px_30px_rgba(0,0,0,0.65)] cursor-pointer transition-all duration-300 hover:border-cyan-400/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.3)]"
       >
         <div
-          className="relative w-full overflow-hidden bg-[#0A1128]"
+          className="relative w-full overflow-hidden bg-[#050A18] aspect-[9/16] flex items-center justify-center"
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
@@ -924,7 +921,7 @@ export default function FusionWallpapersApp() {
             loading="lazy"
             draggable={false}
             onContextMenu={(e) => e.preventDefault()}
-            className="w-full h-auto object-cover pointer-events-none select-none transition-transform duration-500 group-hover:scale-[1.03]"
+            className="w-full h-full object-cover pointer-events-none select-none transition-transform duration-500 group-hover:scale-[1.03]"
           />
 
           <div
@@ -936,7 +933,7 @@ export default function FusionWallpapersApp() {
             type="button"
             aria-label={isSaved ? "Remove from saved" : "Save wallpaper"}
             onClick={(e) => toggleSaveWallpaper(e, item)}
-            className="absolute top-2.5 right-2.5 z-20 h-8 w-8 rounded-full bg-black/50 backdrop-blur-md border border-white/15 flex items-center justify-center text-white hover:bg-black/75 transition active:scale-95"
+            className="absolute top-2.5 right-2.5 z-20 h-8 w-8 rounded-full bg-black/45 backdrop-blur-md border border-white/20 flex items-center justify-center text-white hover:bg-black/70 transition active:scale-95"
           >
             <Bookmark
               className={`h-4 w-4 transition ${
@@ -956,7 +953,7 @@ export default function FusionWallpapersApp() {
             </button>
           )}
 
-          <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#050A18]/95 via-[#050A18]/55 to-transparent pt-9 pb-2.5 px-3 flex items-end">
+          <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#050A18]/95 via-[#050A18]/60 to-transparent pt-10 pb-2.5 px-3 flex items-end">
             <h3 className="text-xs sm:text-sm font-semibold text-white tracking-wide drop-shadow truncate">
               {item.title}
             </h3>
@@ -968,13 +965,13 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      className="min-h-screen bg-[#060B19] text-platinum flex flex-col pb-24 relative overflow-x-hidden"
+      className="min-h-screen bg-[#050A18] text-platinum flex flex-col pb-24 relative overflow-x-hidden selection:bg-cyan-500 selection:text-black"
       onContextMenu={(e) => e.preventDefault()}
     >
-      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] bg-blue-600/15 blur-[110px] rounded-full z-0" />
+      <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[540px] h-[240px] bg-blue-600/15 blur-[120px] rounded-full z-0" />
 
-      {/* ================= STICKY HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-[#060B19]/85 backdrop-blur-xl px-4 pt-3.5 pb-2.5 border-b border-blue-500/10">
+      {/* ================= STICKY LIQUID GLASS HEADER ================= */}
+      <header className="sticky top-0 z-30 bg-[#050A18]/75 backdrop-blur-2xl px-4 pt-3.5 pb-2.5 border-b border-blue-500/15">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
@@ -1010,7 +1007,7 @@ export default function FusionWallpapersApp() {
               <button
                 type="button"
                 onClick={() => setActiveTab("profile")}
-                className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#101A36]/90 border border-blue-400/35 text-platinum text-xs sm:text-sm font-medium shadow-[0_0_12px_rgba(59,130,246,0.2)] hover:border-cyan-400/60 transition"
+                className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-[#0E1730]/80 backdrop-blur-md border border-blue-400/35 text-platinum text-xs sm:text-sm font-medium shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:border-cyan-400/70 transition"
               >
                 <UserIcon className="h-4 w-4 text-cyan-400" />
                 <span className="max-w-[100px] truncate">
@@ -1027,7 +1024,7 @@ export default function FusionWallpapersApp() {
                     "SIGN_IN"
                   )
                 }
-                className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#101A36]/90 border border-blue-400/40 text-white text-xs sm:text-sm font-medium shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:border-cyan-400/70 transition"
+                className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#0E1730]/80 backdrop-blur-md border border-blue-400/40 text-white text-xs sm:text-sm font-medium shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:border-cyan-400/70 transition"
               >
                 <UserIcon className="h-4 w-4 text-silver" />
                 <span>Sign In</span>
@@ -1042,11 +1039,11 @@ export default function FusionWallpapersApp() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-5 pb-12 z-10">
           {user ? (
             <div className="space-y-8">
-              <div className="rounded-3xl bg-[#0E1730]/90 border border-blue-400/30 p-5 sm:p-7 shadow-[0_10px_35px_rgba(0,0,0,0.5)] backdrop-blur-xl">
+              <div className="rounded-3xl bg-[#0A1128]/85 backdrop-blur-2xl border border-blue-400/30 p-5 sm:p-7 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                   <div className="flex items-center gap-4">
                     <div className="h-16 w-16 rounded-full bg-gradient-to-br from-blue-600 to-cyan-400 p-[2px] shadow-[0_0_20px_rgba(56,189,248,0.4)] shrink-0">
-                      <div className="h-full w-full rounded-full bg-[#070D1F] flex items-center justify-center text-xl font-bold text-white uppercase">
+                      <div className="h-full w-full rounded-full bg-[#050A18] flex items-center justify-center text-xl font-bold text-white uppercase">
                         {(profile?.display_name || user.email || "U")[0]}
                       </div>
                     </div>
@@ -1101,7 +1098,7 @@ export default function FusionWallpapersApp() {
                         );
                         setIsSettingsModalOpen(true);
                       }}
-                      className="flex-1 sm:flex-none rounded-full bg-[#162244] hover:bg-[#1E2E5A] text-white border border-blue-400/30 text-xs sm:text-sm h-10 px-4"
+                      className="flex-1 sm:flex-none rounded-full bg-[#101A36] hover:bg-[#16244A] text-white border border-blue-400/35 text-xs sm:text-sm h-10 px-4"
                     >
                       <Settings className="h-4 w-4 mr-1.5 text-cyan-400" />
                       Account Settings
@@ -1132,7 +1129,7 @@ export default function FusionWallpapersApp() {
                 </div>
 
                 {savedWallpapersList.length === 0 ? (
-                  <div className="rounded-3xl bg-[#0E1730]/60 border border-blue-400/20 p-10 text-center max-w-md mx-auto my-6">
+                  <div className="rounded-3xl bg-[#0A1128]/70 backdrop-blur-xl border border-blue-400/20 p-10 text-center max-w-md mx-auto my-6">
                     <Bookmark className="h-10 w-10 text-cyan-400 mx-auto mb-3 opacity-80" />
                     <p className="text-sm sm:text-base font-semibold text-white">
                       You haven&apos;t saved any wallpapers yet.
@@ -1159,8 +1156,8 @@ export default function FusionWallpapersApp() {
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl bg-[#0E1730]/85 border border-blue-400/30 p-8 sm:p-10 text-center max-w-md mx-auto my-8 shadow-[0_10px_35px_rgba(0,0,0,0.6)]">
-              <div className="mx-auto h-16 w-16 rounded-full bg-[#070D1F] border border-cyan-400/40 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(56,189,248,0.25)]">
+            <div className="rounded-3xl bg-[#0A1128]/85 backdrop-blur-2xl border border-blue-400/30 p-8 sm:p-10 text-center max-w-md mx-auto my-8 shadow-[0_12px_40px_rgba(0,0,0,0.6)]">
+              <div className="mx-auto h-16 w-16 rounded-full bg-[#050A18] border border-cyan-400/40 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(56,189,248,0.25)]">
                 <UserIcon className="h-8 w-8 text-cyan-400" />
               </div>
               <h2 className="text-xl font-bold text-white">
@@ -1199,7 +1196,7 @@ export default function FusionWallpapersApp() {
                     setAuthSuccessMsg(null);
                     setIsAuthModalOpen(true);
                   }}
-                  className="flex-1 rounded-full bg-[#162244] text-white border-blue-400/35 hover:bg-[#1E2E5A] font-semibold h-11"
+                  className="flex-1 rounded-full bg-[#101A36] text-white border-blue-400/35 hover:bg-[#16244A] font-semibold h-11"
                 >
                   Create Account
                 </Button>
@@ -1210,7 +1207,7 @@ export default function FusionWallpapersApp() {
       ) : (
         <>
           <div className="max-w-5xl w-full mx-auto px-4 pt-2 pb-4 z-10 space-y-3.5">
-            <div className="relative flex items-center w-full h-12 rounded-full bg-[#0E1730]/90 border border-blue-400/35 px-4 shadow-[0_0_20px_rgba(37,99,235,0.18)] focus-within:border-cyan-400/80 focus-within:shadow-[0_0_25px_rgba(56,189,248,0.35)] transition-all">
+            <div className="relative flex items-center w-full h-12 rounded-full bg-[#0A1128]/85 backdrop-blur-xl border border-blue-400/35 px-4 shadow-[0_0_25px_rgba(37,99,235,0.2)] focus-within:border-cyan-400/80 focus-within:shadow-[0_0_30px_rgba(56,189,248,0.4)] transition-all">
               <Search className="h-5 w-5 text-silver/70 mr-3 shrink-0" />
               <input
                 ref={searchInputRef}
@@ -1252,8 +1249,8 @@ export default function FusionWallpapersApp() {
                     onClick={() => setActiveCategory(cat.id)}
                     className={`flex items-center gap-2 px-4 py-2 rounded-full text-xs sm:text-sm font-medium shrink-0 transition-all duration-300 ${
                       isActive
-                        ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white border border-cyan-300/80 shadow-[0_0_18px_rgba(56,189,248,0.55)]"
-                        : "bg-[#101A36]/90 text-silver border border-blue-500/25 hover:border-blue-400/50 hover:text-white"
+                        ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white border border-cyan-300/80 shadow-[0_0_20px_rgba(56,189,248,0.6)]"
+                        : "bg-[#0A1128]/80 backdrop-blur-md text-silver border border-blue-500/25 hover:border-blue-400/50 hover:text-white"
                     }`}
                   >
                     <IconComponent className="h-4 w-4" />
@@ -1279,12 +1276,12 @@ export default function FusionWallpapersApp() {
                   <div
                     key={idx}
                     style={{ height: `${height}px` }}
-                    className="break-inside-avoid rounded-2xl bg-[#0E1730]/80 border border-blue-400/15 animate-pulse"
+                    className="break-inside-avoid rounded-2xl bg-[#0A1128]/70 backdrop-blur-md border border-blue-400/20 animate-pulse"
                   />
                 ))}
               </div>
             ) : fetchError ? (
-              <div className="rounded-3xl bg-[#0E1730]/80 border border-red-400/30 p-8 text-center max-w-md mx-auto my-8">
+              <div className="rounded-3xl bg-[#0A1128]/85 backdrop-blur-xl border border-red-400/30 p-8 text-center max-w-md mx-auto my-8">
                 <AlertCircle className="h-10 w-10 text-red-400 mx-auto mb-3" />
                 <h3 className="text-base font-bold text-white">
                   Connection Error
@@ -1300,7 +1297,7 @@ export default function FusionWallpapersApp() {
                 </Button>
               </div>
             ) : filteredWallpapers.length === 0 ? (
-              <div className="bg-[#0E1730]/75 border border-blue-400/20 rounded-3xl p-10 text-center max-w-md mx-auto my-6 backdrop-blur-md">
+              <div className="bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/25 rounded-3xl p-10 text-center max-w-md mx-auto my-6">
                 <FourPointStar className="h-10 w-10 text-cyan-400 mx-auto mb-3 opacity-80" />
                 <h3 className="text-base font-semibold text-white">
                   {activeTab === "saved"
@@ -1331,10 +1328,10 @@ export default function FusionWallpapersApp() {
         </>
       )}
 
-      {/* ================= COMPACT FLOATING BOTTOM NAVIGATION ================= */}
+      {/* ================= FLOATING LIQUID GLASS BOTTOM NAVIGATION ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
-        className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[88%] max-w-sm rounded-full bg-[#0C152E]/90 backdrop-blur-xl border border-blue-400/35 px-5 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.75),0_0_20px_rgba(37,99,235,0.22)]"
+        className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[88%] max-w-sm rounded-full bg-[#0A1128]/85 backdrop-blur-2xl border border-blue-400/40 px-5 py-2 shadow-[0_12px_35px_rgba(0,0,0,0.8),0_0_25px_rgba(37,99,235,0.25)]"
       >
         <div className="flex items-center justify-between">
           <button
@@ -1443,7 +1440,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN ================= */}
+      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN WITH FULL-SCREEN TOGGLE & REORDERED BUTTONS ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1458,27 +1455,62 @@ export default function FusionWallpapersApp() {
                 type="button"
                 aria-label="Close detail view"
                 onClick={closeWallpaperDetail}
-                className="h-10 w-10 rounded-full bg-[#101A36]/90 border border-blue-400/35 flex items-center justify-center text-white shadow-[0_0_15px_rgba(0,0,0,0.6)] hover:border-cyan-400 transition"
+                className="h-10 w-10 rounded-full bg-[#0A1128]/85 backdrop-blur-xl border border-blue-400/35 flex items-center justify-center text-white shadow-[0_0_15px_rgba(0,0,0,0.6)] hover:border-cyan-400 transition"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
+            {/* PREVIEW CONTAINER WITH CONDITIONAL FULL-SCREEN / EXPAND BUTTON */}
             <div
-              className="relative rounded-3xl overflow-hidden bg-[#0A1128] border border-blue-400/30 shadow-[0_12px_40px_rgba(0,0,0,0.75)] flex items-center justify-center"
+              className="relative rounded-3xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_15px_45px_rgba(0,0,0,0.8)] flex items-center justify-center"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <img
-                src={selectedWallpaper.image_url}
-                alt={selectedWallpaper.title}
-                draggable={false}
-                onContextMenu={(e) => e.preventDefault()}
-                className="w-full max-h-[72vh] object-contain pointer-events-none select-none"
-              />
+              <div
+                className={`w-full flex items-center justify-center transition-all duration-300 ${
+                  isWideExpanded
+                    ? "max-h-[85vh] overflow-x-auto"
+                    : "max-h-[70vh]"
+                }`}
+              >
+                <img
+                  src={selectedWallpaper.image_url}
+                  alt={selectedWallpaper.title}
+                  draggable={false}
+                  onContextMenu={(e) => e.preventDefault()}
+                  className={`object-contain pointer-events-none select-none transition-all duration-300 ${
+                    isWideExpanded
+                      ? "w-full h-auto max-h-none"
+                      : "w-full max-h-[70vh]"
+                  }`}
+                />
+              </div>
+
               <div
                 className="absolute inset-0 z-10 bg-transparent"
                 onContextMenu={(e) => e.preventDefault()}
               />
+
+              {/* ONLY SHOW FULL-SCREEN EXPAND BUTTON IF WALLPAPER IS WIDER/LONGER THAN STRICT 9:16 */}
+              {imageDimensions.isWide && (
+                <button
+                  type="button"
+                  aria-label="Toggle full screen preview"
+                  onClick={() => setIsWideExpanded(!isWideExpanded)}
+                  className="absolute bottom-3 right-3 z-20 h-10 w-10 rounded-full bg-black/60 backdrop-blur-md border border-white/25 flex items-center justify-center text-white hover:bg-black/85 transition shadow-lg active:scale-95"
+                  title={
+                    isWideExpanded
+                      ? "Fit to 9:16 Frame"
+                      : "View Full Horizontal/Original"
+                  }
+                >
+                  {isWideExpanded ? (
+                    <Minimize2 className="h-5 w-5 text-cyan-400" />
+                  ) : (
+                    <Maximize2 className="h-5 w-5 text-cyan-400" />
+                  )}
+                </button>
+              )}
             </div>
 
             <div className="mt-4 text-center sm:text-left">
@@ -1487,12 +1519,34 @@ export default function FusionWallpapersApp() {
               </h2>
             </div>
 
+            {/* BUTTON REORDERED: SAVE BUTTON FIRST, THEN DOWNLOAD BUTTON WITH IDENTICAL LIQUID GLASS STYLING */}
             <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
+                disabled={savingInProgressIds.includes(selectedWallpaper.id)}
+                className={`flex-1 h-12 rounded-full font-semibold text-sm sm:text-base border transition backdrop-blur-xl shadow-[0_0_20px_rgba(37,99,235,0.2)] ${
+                  savedIds.includes(selectedWallpaper.id)
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500/30 shadow-[0_0_20px_rgba(56,189,248,0.35)]"
+                    : "bg-[#0A1128]/85 border-blue-400/35 text-white hover:border-cyan-400/70"
+                }`}
+              >
+                <Bookmark
+                  className={`h-5 w-5 mr-2 ${
+                    savedIds.includes(selectedWallpaper.id)
+                      ? "fill-cyan-400 text-cyan-400"
+                      : ""
+                  }`}
+                />
+                {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
+              </Button>
+
               <Button
                 type="button"
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-12 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm sm:text-base shadow-[0_0_22px_rgba(56,189,248,0.45)] hover:opacity-95 transition"
+                className="flex-1 h-12 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm sm:text-base shadow-[0_0_25px_rgba(56,189,248,0.45)] hover:opacity-95 transition"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
@@ -1506,35 +1560,14 @@ export default function FusionWallpapersApp() {
                   </>
                 )}
               </Button>
-
-              <Button
-                type="button"
-                variant="outline"
-                onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
-                disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`h-12 px-6 rounded-full font-semibold text-sm sm:text-base border transition ${
-                  savedIds.includes(selectedWallpaper.id)
-                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500/30"
-                    : "bg-[#101A36] border-blue-400/35 text-white hover:border-cyan-400/70"
-                }`}
-              >
-                <Bookmark
-                  className={`h-5 w-5 mr-2 ${
-                    savedIds.includes(selectedWallpaper.id)
-                      ? "fill-cyan-400 text-cyan-400"
-                      : ""
-                  }`}
-                />
-                {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
-              </Button>
             </div>
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
               <div
-                className={`mt-3 p-3 rounded-2xl border text-xs sm:text-sm flex items-center justify-between ${
+                className={`mt-3 p-3 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${
                   downloadStatus.type === "success"
-                    ? "bg-emerald-950/60 border-emerald-400/40 text-emerald-200"
-                    : "bg-red-950/60 border-red-400/40 text-red-200"
+                    ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200"
+                    : "bg-red-950/70 border-red-400/40 text-red-200"
                 }`}
               >
                 <div className="flex items-center gap-2">
@@ -1582,7 +1615,7 @@ export default function FusionWallpapersApp() {
                         onClick={() =>
                           setRelatedVisibleCount((prev) => prev + 6)
                         }
-                        className="rounded-full bg-[#101A36] border-blue-400/35 text-silver hover:text-white px-6"
+                        className="rounded-full bg-[#0A1128]/80 backdrop-blur-md border-blue-400/35 text-silver hover:text-white px-6"
                       >
                         Load More Related
                       </Button>
@@ -1597,9 +1630,9 @@ export default function FusionWallpapersApp() {
 
       {/* ================= FIXED AUTHENTICATION & PASSWORD RESET MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
-        <DialogContent className="bg-[#0E1730] border border-blue-400/35 text-platinum sm:max-w-md rounded-3xl p-6 shadow-[0_15px_50px_rgba(0,0,0,0.8)]">
+        <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.85)]">
           <DialogHeader>
-            <div className="mx-auto bg-[#060B19] p-3 rounded-full border border-cyan-400/30 mb-2 shadow-[0_0_15px_rgba(56,189,248,0.25)]">
+            <div className="mx-auto bg-[#050A18] p-3 rounded-full border border-cyan-400/30 mb-2 shadow-[0_0_15px_rgba(56,189,248,0.25)]">
               <FourPointStar className="h-6 w-6 text-cyan-400" />
             </div>
             <DialogTitle className="text-center text-xl font-bold text-white">
@@ -1624,9 +1657,8 @@ export default function FusionWallpapersApp() {
             </DialogDescription>
           </DialogHeader>
 
-          {/* MODE SWITCHER (Visible on Sign In / Sign Up tabs) */}
           {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
-            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-[#060B19] border border-blue-400/20 mt-1">
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-[#050A18] border border-blue-400/20 mt-1">
               <button
                 type="button"
                 onClick={() => {
@@ -1660,11 +1692,10 @@ export default function FusionWallpapersApp() {
             </div>
           )}
 
-          {/* 1. SIGN IN FORM */}
           {authStep === "SIGN_IN" && (
             <form onSubmit={handleSignInSubmit} className="space-y-4 mt-2">
               {authSuccessMsg && (
-                <p className="text-xs text-emerald-300 bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-400/30 text-center">
+                <p className="text-xs text-emerald-300 bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-400/30 text-center">
                   {authSuccessMsg}
                 </p>
               )}
@@ -1681,7 +1712,7 @@ export default function FusionWallpapersApp() {
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                    className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                   />
                 </div>
               </div>
@@ -1709,12 +1740,12 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                  className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                 />
               </div>
 
               {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
+                <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
                 </p>
               )}
@@ -1722,7 +1753,7 @@ export default function FusionWallpapersApp() {
               <Button
                 type="submit"
                 disabled={authLoading}
-                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
+                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1733,7 +1764,6 @@ export default function FusionWallpapersApp() {
             </form>
           )}
 
-          {/* 2. CREATE ACCOUNT FORM */}
           {authStep === "SIGN_UP" && (
             <form onSubmit={handleSignUpSubmit} className="space-y-4 mt-2">
               <div>
@@ -1748,7 +1778,7 @@ export default function FusionWallpapersApp() {
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                    className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                   />
                 </div>
               </div>
@@ -1763,7 +1793,7 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                  className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                 />
               </div>
 
@@ -1777,12 +1807,12 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                  className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                 />
               </div>
 
               {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
+                <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
                 </p>
               )}
@@ -1790,7 +1820,7 @@ export default function FusionWallpapersApp() {
               <Button
                 type="submit"
                 disabled={authLoading}
-                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
+                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1801,7 +1831,6 @@ export default function FusionWallpapersApp() {
             </form>
           )}
 
-          {/* 3. DEDICATED FORGOT PASSWORD POPUP (FIXED) */}
           {authStep === "FORGOT_PASSWORD" && (
             <form
               onSubmit={handleForgotPasswordSubmit}
@@ -1819,13 +1848,13 @@ export default function FusionWallpapersApp() {
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                    className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                   />
                 </div>
               </div>
 
               {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
+                <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
                 </p>
               )}
@@ -1833,7 +1862,7 @@ export default function FusionWallpapersApp() {
               <Button
                 type="submit"
                 disabled={authLoading || resendCooldown > 0}
-                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
+                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1860,10 +1889,9 @@ export default function FusionWallpapersApp() {
             </form>
           )}
 
-          {/* 4. PASSWORD RESET EMAIL SENT CONFIRMATION */}
           {authStep === "RESET_LINK_SENT" && (
             <div className="space-y-4 mt-2 text-center">
-              <div className="p-3.5 rounded-2xl bg-emerald-950/50 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
+              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
                 {authSuccessMsg ||
                   "Check your email inbox (and spam folder) for the password reset link."}
               </div>
@@ -1875,21 +1903,20 @@ export default function FusionWallpapersApp() {
                   setAuthError(null);
                   setAuthSuccessMsg(null);
                 }}
-                className="w-full h-11 rounded-full bg-[#162244] hover:bg-[#1E2E5A] text-white border border-blue-400/30 font-semibold"
+                className="w-full h-11 rounded-full bg-[#101A36] hover:bg-[#16244A] text-white border border-blue-400/30 font-semibold"
               >
                 Return to Sign In
               </Button>
             </div>
           )}
 
-          {/* 5. SET NEW PASSWORD SCREEN (Opened automatically when user clicks the email reset link) */}
           {authStep === "UPDATE_PASSWORD" && (
             <form
               onSubmit={handleUpdateRecoveredPassword}
               className="space-y-4 mt-2"
             >
               {authSuccessMsg && (
-                <p className="text-xs text-cyan-300 bg-[#060B19] p-2.5 rounded-xl border border-cyan-400/30 text-center">
+                <p className="text-xs text-cyan-300 bg-[#050A18] p-2.5 rounded-xl border border-cyan-400/30 text-center">
                   {authSuccessMsg}
                 </p>
               )}
@@ -1904,7 +1931,7 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white rounded-xl h-10"
+                  className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-10"
                 />
               </div>
 
@@ -1918,12 +1945,12 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white rounded-xl h-10"
+                  className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-10"
                 />
               </div>
 
               {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
+                <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
                 </p>
               )}
@@ -1931,7 +1958,7 @@ export default function FusionWallpapersApp() {
               <Button
                 type="submit"
                 disabled={authLoading}
-                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
+                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -1946,7 +1973,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= ACCOUNT SETTINGS MODAL ================= */}
       <Dialog open={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen}>
-        <DialogContent className="bg-[#0E1730] border border-blue-400/35 text-platinum sm:max-w-md rounded-3xl p-6">
+        <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-white">
               Account Settings
@@ -1965,7 +1992,7 @@ export default function FusionWallpapersApp() {
                 type="email"
                 disabled
                 value={user?.email || ""}
-                className="bg-[#060B19]/60 border-blue-400/20 text-silver rounded-xl opacity-80 cursor-not-allowed"
+                className="bg-[#050A18]/60 border-blue-400/20 text-silver rounded-xl opacity-80 cursor-not-allowed"
               />
             </div>
 
@@ -1978,7 +2005,7 @@ export default function FusionWallpapersApp() {
                 required
                 value={editDisplayName}
                 onChange={(e) => setEditDisplayName(e.target.value)}
-                className="bg-[#060B19] border-blue-400/30 text-white rounded-xl"
+                className="bg-[#050A18] border-blue-400/30 text-white rounded-xl"
               />
             </div>
 
@@ -1997,7 +2024,7 @@ export default function FusionWallpapersApp() {
                   placeholder="Leave blank to keep current"
                   value={newPasswordInput}
                   onChange={(e) => setNewPasswordInput(e.target.value)}
-                  className="bg-[#060B19] border-blue-400/30 text-white rounded-xl"
+                  className="bg-[#050A18] border-blue-400/30 text-white rounded-xl"
                 />
               </div>
 
@@ -2011,7 +2038,7 @@ export default function FusionWallpapersApp() {
                     placeholder="Confirm new password"
                     value={confirmNewPasswordInput}
                     onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
-                    className="bg-[#060B19] border-blue-400/30 text-white rounded-xl"
+                    className="bg-[#050A18] border-blue-400/30 text-white rounded-xl"
                   />
                 </div>
               )}
@@ -2021,8 +2048,8 @@ export default function FusionWallpapersApp() {
               <p
                 className={`text-xs p-2.5 rounded-xl border text-center ${
                   settingsFeedback.type === "success"
-                    ? "bg-emerald-950/50 border-emerald-400/30 text-emerald-300"
-                    : "bg-red-950/50 border-red-400/30 text-red-300"
+                    ? "bg-emerald-950/60 border-emerald-400/30 text-emerald-300"
+                    : "bg-red-950/60 border-red-400/30 text-red-300"
                 }`}
               >
                 {settingsFeedback.text}
@@ -2060,7 +2087,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= ADMIN ONLY UPLOAD MODAL (PRESERVED) ================= */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
-        <DialogContent className="bg-[#0E1730] border border-blue-400/35 text-platinum sm:max-w-md rounded-3xl p-6">
+        <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6">
           <DialogHeader>
             <DialogTitle className="text-lg font-bold text-white">
               Upload New Wallpaper
@@ -2081,7 +2108,7 @@ export default function FusionWallpapersApp() {
                 placeholder="e.g., Midnight Summit"
                 value={uploadTitle}
                 onChange={(e) => setUploadTitle(e.target.value)}
-                className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl"
+                className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl"
               />
             </div>
 
@@ -2098,7 +2125,7 @@ export default function FusionWallpapersApp() {
                     className={`px-3.5 py-1.5 rounded-full text-xs font-medium border transition ${
                       uploadCategory === cat
                         ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white border-cyan-300"
-                        : "bg-[#060B19] text-silver border-blue-400/25"
+                        : "bg-[#050A18] text-silver border-blue-400/25"
                     }`}
                   >
                     {cat}
@@ -2116,7 +2143,7 @@ export default function FusionWallpapersApp() {
                 accept="image/*"
                 required
                 onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                className="bg-[#060B19] border-blue-400/30 text-silver file:bg-[#101A36] file:text-white file:border-0 file:rounded-lg file:px-2.5 file:py-1 file:mr-2 file:text-xs rounded-xl"
+                className="bg-[#050A18] border-blue-400/30 text-silver file:bg-[#101A36] file:text-white file:border-0 file:rounded-lg file:px-2.5 file:py-1 file:mr-2 file:text-xs rounded-xl"
               />
             </div>
 
