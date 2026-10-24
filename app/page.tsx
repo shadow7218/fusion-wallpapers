@@ -63,11 +63,13 @@ interface PendingIntent {
   wallpaper?: Wallpaper;
 }
 
+// Clean, distinct Auth Steps (Separates Sign In, Sign Up, Forgot Password, and Password Reset)
 type AuthStep =
-  | "EMAIL_ENTRY"
-  | "RETURNING_PASSWORD"
-  | "OTP_VERIFY"
-  | "CREATE_PASSWORD";
+  | "SIGN_IN"
+  | "SIGN_UP"
+  | "FORGOT_PASSWORD"
+  | "RESET_LINK_SENT"
+  | "UPDATE_PASSWORD";
 
 const ADMIN_UUID =
   process.env.NEXT_PUBLIC_ADMIN_UUID || "ccd4e82e-93fe-427f-a163-e19367b08649";
@@ -119,6 +121,21 @@ function maskEmailAddress(email?: string | null): string {
   return `${local.slice(0, 3)}***@${domain}`;
 }
 
+// Friendly error translator to catch "email rate limit exceeded" and raw Supabase errors
+function formatSupabaseAuthError(err: any): string {
+  const msg = (err?.message || "").toLowerCase();
+  if (msg.includes("rate limit") || err?.status === 429) {
+    return "Email limit reached on the free server. Please wait ~15 minutes before requesting another email, or sign in with an existing account.";
+  }
+  if (msg.includes("invalid login credentials")) {
+    return "Incorrect email or password. Please double-check and try again.";
+  }
+  if (msg.includes("already registered")) {
+    return "This email is already registered. Please switch to Sign In.";
+  }
+  return err?.message || "Authentication failed. Please try again.";
+}
+
 // Extract category helper for legacy and new wallpapers
 function getWallpaperCategory(w: Wallpaper): string {
   if (w.category && w.category.trim() !== "") return w.category;
@@ -168,10 +185,7 @@ export default function FusionWallpapersApp() {
 
   // --- AUTHENTICATION MODAL & FLOW STATE ---
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false);
-  const [authMode, setAuthMode] = useState<"signin" | "signup" | "recovery">(
-    "signin"
-  );
-  const [authStep, setAuthStep] = useState<AuthStep>("EMAIL_ENTRY");
+  const [authStep, setAuthStep] = useState<AuthStep>("SIGN_IN");
   const [authReason, setAuthReason] = useState<string>(
     "Sign in to save wallpapers and unlock full-resolution downloads."
   );
@@ -182,7 +196,6 @@ export default function FusionWallpapersApp() {
   const [authEmail, setAuthEmail] = useState<string>("");
   const [authPassword, setAuthPassword] = useState<string>("");
   const [authConfirmPassword, setAuthConfirmPassword] = useState<string>("");
-  const [authOtp, setAuthOtp] = useState<string>("");
   const [authLoading, setAuthLoading] = useState<boolean>(false);
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
@@ -231,9 +244,20 @@ export default function FusionWallpapersApp() {
 
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
       const currentUser = session?.user ?? null;
       setUser(currentUser);
+
+      // If user clicked a password reset link in their email, open the Set New Password dialog!
+      if (event === "PASSWORD_RECOVERY") {
+        setAuthStep("UPDATE_PASSWORD");
+        setAuthError(null);
+        setAuthSuccessMsg(
+          "Recovery link verified! Enter your new password below."
+        );
+        setIsAuthModalOpen(true);
+      }
+
       if (currentUser) {
         await Promise.all([
           fetchUserProfile(currentUser),
@@ -249,7 +273,7 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Cooldown timer for OTP resend
+  // Cooldown timer for password reset resend
   useEffect(() => {
     if (resendCooldown <= 0) return;
     const timer = setInterval(() => {
@@ -338,11 +362,14 @@ export default function FusionWallpapersApp() {
   };
 
   // --- 3. PROMPT AUTH MODAL & RESUME PENDING INTENT ---
-  const requireAuthForAction = (reason: string, intent: PendingIntent) => {
+  const requireAuthForAction = (
+    reason: string,
+    intent: PendingIntent,
+    initialStep: AuthStep = "SIGN_IN"
+  ) => {
     setAuthReason(reason);
     setPendingIntent(intent);
-    setAuthMode("signin");
-    setAuthStep("EMAIL_ENTRY");
+    setAuthStep(initialStep);
     setAuthError(null);
     setAuthSuccessMsg(null);
     setIsAuthModalOpen(true);
@@ -366,13 +393,14 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- 4. MULTI-STEP AUTHENTICATION HANDLERS ---
+  // --- 4. FIXED AUTHENTICATION HANDLERS (SIGN IN, SIGN UP, FORGOT PASSWORD) ---
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-  // Step 1: Submit Email
-  const handleEmailStepSubmit = async (e: React.FormEvent) => {
+  // A. Returning User Sign In (Zero emails sent -> Never hits email rate limit!)
+  const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authLoading) return;
     setAuthError(null);
     setAuthSuccessMsg(null);
 
@@ -382,45 +410,10 @@ export default function FusionWallpapersApp() {
       return;
     }
 
-    if (authMode === "signin") {
-      // Returning user -> go to password step
-      setAuthStep("RETURNING_PASSWORD");
-      return;
-    }
-
-    // New Account Signup OR Password Recovery -> Send real 6-digit OTP via Supabase
     setAuthLoading(true);
-    try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: cleanEmail,
-        options: {
-          shouldCreateUser: true,
-        },
-      });
-      if (error) throw error;
-
-      setAuthStep("OTP_VERIFY");
-      setResendCooldown(60);
-      setAuthSuccessMsg(`Verification code sent to ${cleanEmail}`);
-    } catch (err: any) {
-      setAuthError(
-        err.message || "Could not send verification code. Please try again."
-      );
-    } finally {
-      setAuthLoading(false);
-    }
-  };
-
-  // Returning User: Verify Password
-  const handleReturningPasswordSignIn = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (authLoading) return;
-    setAuthError(null);
-    setAuthLoading(true);
-
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
-        email: authEmail.trim().toLowerCase(),
+        email: cleanEmail,
         password: authPassword,
       });
 
@@ -432,89 +425,115 @@ export default function FusionWallpapersApp() {
         await executePendingIntentAfterAuth(data.user);
       }
     } catch (err: any) {
-      setAuthError(
-        err.message || "Incorrect email or password. Please try again."
-      );
+      setAuthError(formatSupabaseAuthError(err));
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Step 2: Verify 6-Digit Email OTP
-  const handleVerifyEmailOtp = async (e: React.FormEvent) => {
+  // B. New User Sign Up (Uses standard signUp instead of double-triggering signInWithOtp)
+  const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
     setAuthError(null);
     setAuthSuccessMsg(null);
 
-    const cleanToken = authOtp.trim();
-    if (cleanToken.length < 6) {
-      setAuthError("Please enter the 6-digit verification code.");
+    const cleanEmail = authEmail.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      setAuthError("Please enter a valid email address.");
+      return;
+    }
+    if (authPassword.length < 6) {
+      setAuthError("Password must be at least 6 characters long.");
+      return;
+    }
+    if (authPassword !== authConfirmPassword) {
+      setAuthError("Passwords do not match.");
       return;
     }
 
     setAuthLoading(true);
     try {
-      // Try 'email' OTP verification first, fallback to 'signup' or 'recovery' if needed
-      let verifyResult = await supabase.auth.verifyOtp({
-        email: authEmail.trim().toLowerCase(),
-        token: cleanToken,
-        type: "email",
+      const { data, error } = await supabase.auth.signUp({
+        email: cleanEmail,
+        password: authPassword,
       });
 
-      if (verifyResult.error) {
-        verifyResult = await supabase.auth.verifyOtp({
-          email: authEmail.trim().toLowerCase(),
-          token: cleanToken,
-          type: "signup",
-        });
+      if (error) throw error;
+
+      // Case 1: "Confirm email" is OFF in Supabase -> session is returned immediately!
+      if (data.session && data.user) {
+        const defaultName = cleanEmail.split("@")[0] || "Fusion Explorer";
+        await supabase
+          .from("profiles")
+          .upsert({ id: data.user.id, display_name: defaultName });
+        await fetchUserProfile(data.user);
+
+        setIsAuthModalOpen(false);
+        setAuthPassword("");
+        setAuthConfirmPassword("");
+        await executePendingIntentAfterAuth(data.user);
+        return;
       }
 
-      if (verifyResult.error) throw verifyResult.error;
-
-      setAuthOtp("");
-      setAuthStep("CREATE_PASSWORD");
+      // Case 2: "Confirm email" is ON in Supabase -> ask user to click confirmation link in email
+      setAuthPassword("");
+      setAuthConfirmPassword("");
+      setAuthStep("SIGN_IN");
       setAuthSuccessMsg(
-        "Email verified! Create a password to secure your account."
+        `Account created! Please check ${cleanEmail} for a confirmation link, then sign in below.`
       );
     } catch (err: any) {
-      setAuthError(
-        err.message || "Invalid or expired verification code. Please try again."
-      );
+      setAuthError(formatSupabaseAuthError(err));
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Resend OTP Code with Cooldown
-  const handleResendOtp = async () => {
-    if (resendCooldown > 0 || authLoading) return;
+  // C. Dedicated Forgot Password Handler (Calls resetPasswordForEmail instead of OTP signup!)
+  const handleForgotPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (authLoading || resendCooldown > 0) return;
     setAuthError(null);
-    setAuthLoading(true);
+    setAuthSuccessMsg(null);
 
+    const cleanEmail = authEmail.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail)) {
+      setAuthError("Please enter your registered email address.");
+      return;
+    }
+
+    setAuthLoading(true);
     try {
-      const { error } = await supabase.auth.signInWithOtp({
-        email: authEmail.trim().toLowerCase(),
-        options: { shouldCreateUser: true },
+      const redirectUrl =
+        typeof window !== "undefined" ? window.location.origin : undefined;
+
+      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+        redirectTo: redirectUrl,
       });
+
       if (error) throw error;
+
       setResendCooldown(60);
-      setAuthSuccessMsg("A new verification code has been sent to your email.");
+      setAuthStep("RESET_LINK_SENT");
+      setAuthSuccessMsg(
+        `Password reset instructions have been sent to ${cleanEmail}.`
+      );
     } catch (err: any) {
-      setAuthError(err.message || "Rate limit reached. Please wait a moment.");
+      setAuthError(formatSupabaseAuthError(err));
     } finally {
       setAuthLoading(false);
     }
   };
 
-  // Step 3 & 4: Create & Confirm Password -> Complete Authentication
-  const handleSetAccountPassword = async (e: React.FormEvent) => {
+  // D. Complete Password Recovery (When user returns via email reset link)
+  const handleUpdateRecoveredPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (authLoading) return;
     setAuthError(null);
 
     if (authPassword.length < 6) {
-      setAuthError("Password must be at least 6 characters long.");
+      setAuthError("New password must be at least 6 characters long.");
       return;
     }
     if (authPassword !== authConfirmPassword) {
@@ -530,25 +549,16 @@ export default function FusionWallpapersApp() {
 
       if (error) throw error;
 
-      // Ensure user profile entry exists
-      if (data.user) {
-        const defaultName =
-          data.user.email?.split("@")[0] || "Fusion Explorer";
-        await supabase
-          .from("profiles")
-          .upsert({ id: data.user.id, display_name: defaultName });
-        await fetchUserProfile(data.user);
-      }
-
       setIsAuthModalOpen(false);
       setAuthPassword("");
       setAuthConfirmPassword("");
+      setAuthStep("SIGN_IN");
 
       if (data.user) {
         await executePendingIntentAfterAuth(data.user);
       }
     } catch (err: any) {
-      setAuthError(err.message || "Failed to save password. Please try again.");
+      setAuthError(formatSupabaseAuthError(err));
     } finally {
       setAuthLoading(false);
     }
@@ -640,7 +650,6 @@ export default function FusionWallpapersApp() {
     setDownloadStatus(null);
 
     try {
-      // Try downloading directly from Supabase Storage first to handle expired/signed URLs gracefully
       let fileBlob: Blob | null = null;
       if (wallpaper.storage_path) {
         const { data, error } = await supabase.storage
@@ -651,7 +660,6 @@ export default function FusionWallpapersApp() {
         }
       }
 
-      // Fallback to direct fetch of image_url if needed
       if (!fileBlob) {
         const response = await fetch(wallpaper.image_url, { mode: "cors" });
         if (!response.ok) {
@@ -664,8 +672,10 @@ export default function FusionWallpapersApp() {
         throw new Error("Downloaded file is empty or unavailable.");
       }
 
-      // Preserve original file extension from storage_path or MIME type
-      const extFromPath = wallpaper.storage_path?.split(".").pop()?.toLowerCase();
+      const extFromPath = wallpaper.storage_path
+        ?.split(".")
+        .pop()
+        ?.toLowerCase();
       const validExt =
         extFromPath && ["jpg", "jpeg", "png", "webp"].includes(extFromPath)
           ? extFromPath
@@ -698,7 +708,8 @@ export default function FusionWallpapersApp() {
         id: wallpaper.id,
         type: "error",
         message:
-          err.message || "Download failed. Please check your connection and retry.",
+          err.message ||
+          "Download failed. Please check your connection and retry.",
       });
     } finally {
       setDownloadingId(null);
@@ -718,7 +729,6 @@ export default function FusionWallpapersApp() {
         throw new Error("Display name cannot be empty.");
       }
 
-      // Update display name in profiles table
       const { error: profileError } = await supabase.from("profiles").upsert({
         id: user.id,
         display_name: trimmedName,
@@ -728,7 +738,6 @@ export default function FusionWallpapersApp() {
 
       setProfile({ id: user.id, display_name: trimmedName });
 
-      // If user also entered a new password, update it securely
       if (newPasswordInput.trim().length > 0) {
         if (newPasswordInput.length < 6) {
           throw new Error("New password must be at least 6 characters.");
@@ -783,7 +792,6 @@ export default function FusionWallpapersApp() {
         data: { publicUrl },
       } = supabase.storage.from("wallpapers").getPublicUrl(fileName);
 
-      // Insert with category support (gracefully falls back if column not migrated yet)
       const { error: dbError } = await supabase.from("wallpapers").insert([
         {
           title: uploadTitle.trim(),
@@ -794,7 +802,6 @@ export default function FusionWallpapersApp() {
       ]);
 
       if (dbError) {
-        // Fallback insert if category column wasn't added yet
         const { error: fallbackError } = await supabase
           .from("wallpapers")
           .insert([
@@ -878,7 +885,6 @@ export default function FusionWallpapersApp() {
 
     const others = wallpapers.filter((w) => w.id !== selectedWallpaper.id);
 
-    // Score each wallpaper by category match and shared title/keyword tokens
     const scored = others.map((candidate) => {
       let score = 0;
       const candCat = getWallpaperCategory(candidate).toLowerCase();
@@ -921,13 +927,11 @@ export default function FusionWallpapersApp() {
             className="w-full h-auto object-cover pointer-events-none select-none transition-transform duration-500 group-hover:scale-[1.03]"
           />
 
-          {/* Anti-Long-Press Shield */}
           <div
             className="absolute inset-0 z-10 bg-transparent"
             onContextMenu={(e) => e.preventDefault()}
           />
 
-          {/* Top-Right Bookmark / Remove Saved Button */}
           <button
             type="button"
             aria-label={isSaved ? "Remove from saved" : "Save wallpaper"}
@@ -941,7 +945,6 @@ export default function FusionWallpapersApp() {
             />
           </button>
 
-          {/* Admin Delete Button (Only visible to Admin) */}
           {isAdmin && !options?.showRemoveSavedBtn && (
             <button
               type="button"
@@ -953,7 +956,6 @@ export default function FusionWallpapersApp() {
             </button>
           )}
 
-          {/* Clean Bottom Gradient with Wallpaper Name ONLY */}
           <div className="absolute inset-x-0 bottom-0 z-20 bg-gradient-to-t from-[#050A18]/95 via-[#050A18]/55 to-transparent pt-9 pb-2.5 px-3 flex items-end">
             <h3 className="text-xs sm:text-sm font-semibold text-white tracking-wide drop-shadow truncate">
               {item.title}
@@ -969,13 +971,11 @@ export default function FusionWallpapersApp() {
       className="min-h-screen bg-[#060B19] text-platinum flex flex-col pb-24 relative overflow-x-hidden"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Top Ambient Electric-Blue Glow */}
       <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[520px] h-[220px] bg-blue-600/15 blur-[110px] rounded-full z-0" />
 
       {/* ================= STICKY HEADER ================= */}
       <header className="sticky top-0 z-30 bg-[#060B19]/85 backdrop-blur-xl px-4 pt-3.5 pb-2.5 border-b border-blue-500/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
-          {/* Brand Identity */}
           <button
             type="button"
             onClick={() => {
@@ -994,7 +994,6 @@ export default function FusionWallpapersApp() {
             </span>
           </button>
 
-          {/* Right Controls: Admin Upload & Auth Pill */}
           <div className="flex items-center gap-2">
             {isAdmin && (
               <button
@@ -1024,7 +1023,8 @@ export default function FusionWallpapersApp() {
                 onClick={() =>
                   requireAuthForAction(
                     "Sign in to save wallpapers and unlock full-resolution downloads.",
-                    { type: "profile_tab" }
+                    { type: "profile_tab" },
+                    "SIGN_IN"
                   )
                 }
                 className="flex items-center gap-2 px-4 py-1.5 rounded-full bg-[#101A36]/90 border border-blue-400/40 text-white text-xs sm:text-sm font-medium shadow-[0_0_15px_rgba(59,130,246,0.25)] hover:border-cyan-400/70 transition"
@@ -1039,11 +1039,9 @@ export default function FusionWallpapersApp() {
 
       {/* ================= MAIN CONTENT AREA ================= */}
       {activeTab === "profile" ? (
-        /* ================= DEDICATED ACCOUNT & PROFILE VIEW ================= */
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-5 pb-12 z-10">
           {user ? (
             <div className="space-y-8">
-              {/* Signed-In User Header Card */}
               <div className="rounded-3xl bg-[#0E1730]/90 border border-blue-400/30 p-5 sm:p-7 shadow-[0_10px_35px_rgba(0,0,0,0.5)] backdrop-blur-xl">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-5">
                   <div className="flex items-center gap-4">
@@ -1065,7 +1063,6 @@ export default function FusionWallpapersApp() {
                         )}
                       </div>
 
-                      {/* Partially Masked Email with Deliberate Toggle */}
                       <div className="flex items-center gap-2 text-xs sm:text-sm text-silver">
                         <span className="truncate">
                           {revealFullEmail
@@ -1092,7 +1089,6 @@ export default function FusionWallpapersApp() {
                     </div>
                   </div>
 
-                  {/* Account Action Buttons */}
                   <div className="flex items-center gap-2.5">
                     <Button
                       type="button"
@@ -1124,7 +1120,6 @@ export default function FusionWallpapersApp() {
                 </div>
               </div>
 
-              {/* My Saved Wallpapers Section */}
               <div className="space-y-4">
                 <div className="flex items-center justify-between">
                   <h3 className="text-base sm:text-lg font-bold text-white tracking-wide">
@@ -1164,7 +1159,6 @@ export default function FusionWallpapersApp() {
               </div>
             </div>
           ) : (
-            /* Guest Profile Page */
             <div className="rounded-3xl bg-[#0E1730]/85 border border-blue-400/30 p-8 sm:p-10 text-center max-w-md mx-auto my-8 shadow-[0_10px_35px_rgba(0,0,0,0.6)]">
               <div className="mx-auto h-16 w-16 rounded-full bg-[#070D1F] border border-cyan-400/40 flex items-center justify-center mb-4 shadow-[0_0_20px_rgba(56,189,248,0.25)]">
                 <UserIcon className="h-8 w-8 text-cyan-400" />
@@ -1184,8 +1178,9 @@ export default function FusionWallpapersApp() {
                     setAuthReason(
                       "Sign in to access your saved wallpapers and full-resolution downloads."
                     );
-                    setAuthMode("signin");
-                    setAuthStep("EMAIL_ENTRY");
+                    setAuthStep("SIGN_IN");
+                    setAuthError(null);
+                    setAuthSuccessMsg(null);
                     setIsAuthModalOpen(true);
                   }}
                   className="flex-1 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-semibold h-11 shadow-[0_0_18px_rgba(56,189,248,0.4)]"
@@ -1197,10 +1192,11 @@ export default function FusionWallpapersApp() {
                   variant="outline"
                   onClick={() => {
                     setAuthReason(
-                      "Create a free account with email verification to unlock all features."
+                      "Create a free account to unlock full-resolution downloads and saved wallpapers."
                     );
-                    setAuthMode("signup");
-                    setAuthStep("EMAIL_ENTRY");
+                    setAuthStep("SIGN_UP");
+                    setAuthError(null);
+                    setAuthSuccessMsg(null);
                     setIsAuthModalOpen(true);
                   }}
                   className="flex-1 rounded-full bg-[#162244] text-white border-blue-400/35 hover:bg-[#1E2E5A] font-semibold h-11"
@@ -1212,9 +1208,7 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : (
-        /* ================= HOME / EXPLORE / SAVED GALLERY VIEW ================= */
         <>
-          {/* Search Bar & Category Pills */}
           <div className="max-w-5xl w-full mx-auto px-4 pt-2 pb-4 z-10 space-y-3.5">
             <div className="relative flex items-center w-full h-12 rounded-full bg-[#0E1730]/90 border border-blue-400/35 px-4 shadow-[0_0_20px_rgba(37,99,235,0.18)] focus-within:border-cyan-400/80 focus-within:shadow-[0_0_25px_rgba(56,189,248,0.35)] transition-all">
               <Search className="h-5 w-5 text-silver/70 mr-3 shrink-0" />
@@ -1247,7 +1241,6 @@ export default function FusionWallpapersApp() {
               )}
             </div>
 
-            {/* Category Pills */}
             <div className="flex items-center gap-2.5 overflow-x-auto no-scrollbar pb-1">
               {CATEGORIES.map((cat) => {
                 const IconComponent = cat.icon;
@@ -1271,7 +1264,6 @@ export default function FusionWallpapersApp() {
             </div>
           </div>
 
-          {/* Main Wallpaper Grid */}
           <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10">
             {activeTab === "saved" && (
               <div className="mb-3.5 flex items-center justify-between">
@@ -1282,7 +1274,6 @@ export default function FusionWallpapersApp() {
             )}
 
             {loading ? (
-              /* Skeleton Loading State */
               <div className="columns-2 sm:columns-3 md:columns-4 gap-3.5 space-y-3.5">
                 {[260, 190, 230, 280, 200, 250].map((height, idx) => (
                   <div
@@ -1346,7 +1337,6 @@ export default function FusionWallpapersApp() {
         className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[88%] max-w-sm rounded-full bg-[#0C152E]/90 backdrop-blur-xl border border-blue-400/35 px-5 py-2 shadow-[0_10px_30px_rgba(0,0,0,0.75),0_0_20px_rgba(37,99,235,0.22)]"
       >
         <div className="flex items-center justify-between">
-          {/* Home */}
           <button
             type="button"
             onClick={() => {
@@ -1371,7 +1361,6 @@ export default function FusionWallpapersApp() {
             </span>
           </button>
 
-          {/* Explore */}
           <button
             type="button"
             onClick={() => {
@@ -1397,7 +1386,6 @@ export default function FusionWallpapersApp() {
             </span>
           </button>
 
-          {/* Saved (Prompts login for guests) */}
           <button
             type="button"
             onClick={() => {
@@ -1429,7 +1417,6 @@ export default function FusionWallpapersApp() {
             </span>
           </button>
 
-          {/* Profile */}
           <button
             type="button"
             onClick={() => {
@@ -1456,7 +1443,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN (MODAL / FULL VIEW) ================= */}
+      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1466,7 +1453,6 @@ export default function FusionWallpapersApp() {
           className="fixed inset-0 z-50 bg-[#050A18]/95 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-200"
         >
           <div className="max-w-3xl mx-auto px-4 pt-4 pb-16">
-            {/* 1. Close Button in Top-Right Corner */}
             <div className="sticky top-3 z-30 flex justify-end mb-2">
               <button
                 type="button"
@@ -1478,7 +1464,6 @@ export default function FusionWallpapersApp() {
               </button>
             </div>
 
-            {/* 2. Large, High-Quality Preview */}
             <div
               className="relative rounded-3xl overflow-hidden bg-[#0A1128] border border-blue-400/30 shadow-[0_12px_40px_rgba(0,0,0,0.75)] flex items-center justify-center"
               onContextMenu={(e) => e.preventDefault()}
@@ -1496,14 +1481,12 @@ export default function FusionWallpapersApp() {
               />
             </div>
 
-            {/* 3. Wallpaper Name Directly Below Image */}
             <div className="mt-4 text-center sm:text-left">
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
                 {selectedWallpaper.title}
               </h2>
             </div>
 
-            {/* 4 & 5. Prominent Download Button + Save/Bookmark Button */}
             <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
               <Button
                 type="button"
@@ -1546,7 +1529,6 @@ export default function FusionWallpapersApp() {
               </Button>
             </div>
 
-            {/* Download Feedback Banner */}
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
               <div
                 className={`mt-3 p-3 rounded-2xl border text-xs sm:text-sm flex items-center justify-between ${
@@ -1575,7 +1557,6 @@ export default function FusionWallpapersApp() {
               </div>
             )}
 
-            {/* 6. Related Wallpapers Section */}
             <div className="mt-10 pt-6 border-t border-blue-400/20">
               <h3 className="text-base sm:text-lg font-bold text-white tracking-wide mb-4">
                 Related Wallpapers
@@ -1614,7 +1595,7 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= MULTI-STEP AUTHENTICATION MODAL ================= */}
+      {/* ================= FIXED AUTHENTICATION & PASSWORD RESET MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
         <DialogContent className="bg-[#0E1730] border border-blue-400/35 text-platinum sm:max-w-md rounded-3xl p-6 shadow-[0_15px_50px_rgba(0,0,0,0.8)]">
           <DialogHeader>
@@ -1622,55 +1603,71 @@ export default function FusionWallpapersApp() {
               <FourPointStar className="h-6 w-6 text-cyan-400" />
             </div>
             <DialogTitle className="text-center text-xl font-bold text-white">
-              {authStep === "OTP_VERIFY"
-                ? "Verify Your Email"
-                : authStep === "CREATE_PASSWORD"
-                ? "Create Your Password"
-                : authMode === "signup"
+              {authStep === "FORGOT_PASSWORD"
+                ? "Reset Your Password"
+                : authStep === "RESET_LINK_SENT"
+                ? "Check Your Email"
+                : authStep === "UPDATE_PASSWORD"
+                ? "Set New Password"
+                : authStep === "SIGN_UP"
                 ? "Create Free Account"
-                : authMode === "recovery"
-                ? "Reset Password"
                 : "Sign In to Fusion"}
             </DialogTitle>
             <DialogDescription className="text-center text-silver text-xs sm:text-sm">
-              {authReason}
+              {authStep === "FORGOT_PASSWORD"
+                ? "Enter your account email and we will send you a password reset link."
+                : authStep === "RESET_LINK_SENT"
+                ? "Follow the reset link sent to your inbox to choose a new password."
+                : authStep === "UPDATE_PASSWORD"
+                ? "Choose a strong new password for your Fusion Wallpapers account."
+                : authReason}
             </DialogDescription>
           </DialogHeader>
 
-          {/* STEP 1: ENTER EMAIL */}
-          {authStep === "EMAIL_ENTRY" && (
-            <form onSubmit={handleEmailStepSubmit} className="space-y-4 mt-2">
-              {/* Mode Switch Tabs */}
-              <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-[#060B19] border border-blue-400/20">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode("signin");
-                    setAuthError(null);
-                  }}
-                  className={`py-1.5 rounded-full text-xs font-semibold transition ${
-                    authMode === "signin"
-                      ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white"
-                      : "text-silver hover:text-white"
-                  }`}
-                >
-                  Sign In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode("signup");
-                    setAuthError(null);
-                  }}
-                  className={`py-1.5 rounded-full text-xs font-semibold transition ${
-                    authMode === "signup"
-                      ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white"
-                      : "text-silver hover:text-white"
-                  }`}
-                >
-                  Create Account
-                </button>
-              </div>
+          {/* MODE SWITCHER (Visible on Sign In / Sign Up tabs) */}
+          {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-[#060B19] border border-blue-400/20 mt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthStep("SIGN_IN");
+                  setAuthError(null);
+                  setAuthSuccessMsg(null);
+                }}
+                className={`py-1.5 rounded-full text-xs font-semibold transition ${
+                  authStep === "SIGN_IN"
+                    ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white"
+                    : "text-silver hover:text-white"
+                }`}
+              >
+                Sign In
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setAuthStep("SIGN_UP");
+                  setAuthError(null);
+                  setAuthSuccessMsg(null);
+                }}
+                className={`py-1.5 rounded-full text-xs font-semibold transition ${
+                  authStep === "SIGN_UP"
+                    ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white"
+                    : "text-silver hover:text-white"
+                }`}
+              >
+                Create Account
+              </button>
+            </div>
+          )}
+
+          {/* 1. SIGN IN FORM */}
+          {authStep === "SIGN_IN" && (
+            <form onSubmit={handleSignInSubmit} className="space-y-4 mt-2">
+              {authSuccessMsg && (
+                <p className="text-xs text-emerald-300 bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-400/30 text-center">
+                  {authSuccessMsg}
+                </p>
+              )}
 
               <div>
                 <label className="text-xs font-medium text-silver block mb-1.5">
@@ -1689,46 +1686,6 @@ export default function FusionWallpapersApp() {
                 </div>
               </div>
 
-              {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
-                  {authError}
-                </p>
-              )}
-
-              <Button
-                type="submit"
-                disabled={authLoading}
-                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
-              >
-                {authLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Continue"
-                )}
-              </Button>
-            </form>
-          )}
-
-          {/* RETURNING USER: PASSWORD ENTRY */}
-          {authStep === "RETURNING_PASSWORD" && (
-            <form
-              onSubmit={handleReturningPasswordSignIn}
-              className="space-y-4 mt-2"
-            >
-              <div className="flex items-center justify-between text-xs bg-[#060B19] px-3.5 py-2 rounded-xl border border-blue-400/20">
-                <span className="text-silver truncate">{authEmail}</span>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthStep("EMAIL_ENTRY");
-                    setAuthError(null);
-                  }}
-                  className="text-cyan-400 hover:underline font-medium ml-2 shrink-0"
-                >
-                  Change
-                </button>
-              </div>
-
               <div>
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-silver">
@@ -1736,27 +1693,10 @@ export default function FusionWallpapersApp() {
                   </label>
                   <button
                     type="button"
-                    onClick={async () => {
-                      setAuthMode("recovery");
+                    onClick={() => {
+                      setAuthStep("FORGOT_PASSWORD");
                       setAuthError(null);
-                      setAuthLoading(true);
-                      try {
-                        const { error } = await supabase.auth.signInWithOtp({
-                          email: authEmail.trim().toLowerCase(),
-                        });
-                        if (error) throw error;
-                        setAuthStep("OTP_VERIFY");
-                        setResendCooldown(60);
-                        setAuthSuccessMsg(
-                          "Verification code sent to reset your password."
-                        );
-                      } catch (err: any) {
-                        setAuthError(
-                          err.message || "Could not send recovery code."
-                        );
-                      } finally {
-                        setAuthLoading(false);
-                      }
+                      setAuthSuccessMsg(null);
                     }}
                     className="text-[11px] text-cyan-400 hover:underline"
                   >
@@ -1790,52 +1730,59 @@ export default function FusionWallpapersApp() {
                   "Sign In"
                 )}
               </Button>
-
-              <div className="text-center">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthMode("signup");
-                    setAuthStep("EMAIL_ENTRY");
-                    setAuthError(null);
-                  }}
-                  className="text-xs text-silver hover:text-white underline underline-offset-4"
-                >
-                  New to Fusion? Verify email to create an account
-                </button>
-              </div>
             </form>
           )}
 
-          {/* STEP 2: VERIFY EMAIL WITH 6-DIGIT OTP CODE */}
-          {authStep === "OTP_VERIFY" && (
-            <form onSubmit={handleVerifyEmailOtp} className="space-y-4 mt-2">
-              {authSuccessMsg && (
-                <p className="text-xs text-cyan-300 bg-[#060B19] p-2.5 rounded-xl border border-cyan-400/30 text-center">
-                  {authSuccessMsg}
-                </p>
-              )}
+          {/* 2. CREATE ACCOUNT FORM */}
+          {authStep === "SIGN_UP" && (
+            <form onSubmit={handleSignUpSubmit} className="space-y-4 mt-2">
+              <div>
+                <label className="text-xs font-medium text-silver block mb-1.5">
+                  Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3" />
+                  <Input
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="pl-10 bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                  />
+                </div>
+              </div>
 
               <div>
-                <label className="text-xs font-medium text-silver block mb-1.5 text-center">
-                  Enter 6-Digit Verification Code
+                <label className="text-xs font-medium text-silver block mb-1">
+                  Create Password (min. 6 characters)
                 </label>
                 <Input
-                  type="text"
-                  inputMode="numeric"
-                  maxLength={6}
+                  type="password"
                   required
-                  placeholder="123456"
-                  value={authOtp}
-                  onChange={(e) =>
-                    setAuthOtp(e.target.value.replace(/[^0-9]/g, ""))
-                  }
-                  className="bg-[#060B19] border-blue-400/35 text-white text-center text-lg tracking-[0.4em] font-bold rounded-xl h-12"
+                  placeholder="••••••••"
+                  value={authPassword}
+                  onChange={(e) => setAuthPassword(e.target.value)}
+                  className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-medium text-silver block mb-1">
+                  Confirm Password
+                </label>
+                <Input
+                  type="password"
+                  required
+                  placeholder="••••••••"
+                  value={authConfirmPassword}
+                  onChange={(e) => setAuthConfirmPassword(e.target.value)}
+                  className="bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
                 />
               </div>
 
               {authError && (
-                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30 text-center">
+                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
                 </p>
               )}
@@ -1848,52 +1795,108 @@ export default function FusionWallpapersApp() {
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Verify Code"
+                  "Create Account"
+                )}
+              </Button>
+            </form>
+          )}
+
+          {/* 3. DEDICATED FORGOT PASSWORD POPUP (FIXED) */}
+          {authStep === "FORGOT_PASSWORD" && (
+            <form
+              onSubmit={handleForgotPasswordSubmit}
+              className="space-y-4 mt-2"
+            >
+              <div>
+                <label className="text-xs font-medium text-silver block mb-1.5">
+                  Account Email Address
+                </label>
+                <div className="relative">
+                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3" />
+                  <Input
+                    type="email"
+                    required
+                    placeholder="you@example.com"
+                    value={authEmail}
+                    onChange={(e) => setAuthEmail(e.target.value)}
+                    className="pl-10 bg-[#060B19] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10"
+                  />
+                </div>
+              </div>
+
+              {authError && (
+                <p className="text-xs text-red-300 bg-red-950/50 p-2.5 rounded-xl border border-red-400/30">
+                  {authError}
+                </p>
+              )}
+
+              <Button
+                type="submit"
+                disabled={authLoading || resendCooldown > 0}
+                className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]"
+              >
+                {authLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : resendCooldown > 0 ? (
+                  `Wait ${resendCooldown}s to Resend`
+                ) : (
+                  "Send Password Reset Link"
                 )}
               </Button>
 
-              <div className="flex items-center justify-between text-xs pt-1">
+              <div className="text-center pt-1">
                 <button
                   type="button"
                   onClick={() => {
-                    setAuthStep("EMAIL_ENTRY");
+                    setAuthStep("SIGN_IN");
                     setAuthError(null);
                   }}
-                  className="text-silver hover:text-white flex items-center gap-1"
+                  className="text-xs text-silver hover:text-white inline-flex items-center gap-1"
                 >
                   <ArrowLeft className="h-3.5 w-3.5" />
-                  Change Email
-                </button>
-
-                <button
-                  type="button"
-                  disabled={resendCooldown > 0 || authLoading}
-                  onClick={handleResendOtp}
-                  className="text-cyan-400 hover:underline disabled:opacity-50"
-                >
-                  {resendCooldown > 0
-                    ? `Resend code in ${resendCooldown}s`
-                    : "Resend Code"}
+                  Back to Sign In
                 </button>
               </div>
             </form>
           )}
 
-          {/* STEP 3: CREATE & CONFIRM PASSWORD */}
-          {authStep === "CREATE_PASSWORD" && (
+          {/* 4. PASSWORD RESET EMAIL SENT CONFIRMATION */}
+          {authStep === "RESET_LINK_SENT" && (
+            <div className="space-y-4 mt-2 text-center">
+              <div className="p-3.5 rounded-2xl bg-emerald-950/50 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
+                {authSuccessMsg ||
+                  "Check your email inbox (and spam folder) for the password reset link."}
+              </div>
+
+              <Button
+                type="button"
+                onClick={() => {
+                  setAuthStep("SIGN_IN");
+                  setAuthError(null);
+                  setAuthSuccessMsg(null);
+                }}
+                className="w-full h-11 rounded-full bg-[#162244] hover:bg-[#1E2E5A] text-white border border-blue-400/30 font-semibold"
+              >
+                Return to Sign In
+              </Button>
+            </div>
+          )}
+
+          {/* 5. SET NEW PASSWORD SCREEN (Opened automatically when user clicks the email reset link) */}
+          {authStep === "UPDATE_PASSWORD" && (
             <form
-              onSubmit={handleSetAccountPassword}
+              onSubmit={handleUpdateRecoveredPassword}
               className="space-y-4 mt-2"
             >
               {authSuccessMsg && (
-                <p className="text-xs text-emerald-300 bg-emerald-950/50 p-2.5 rounded-xl border border-emerald-400/30 text-center">
+                <p className="text-xs text-cyan-300 bg-[#060B19] p-2.5 rounded-xl border border-cyan-400/30 text-center">
                   {authSuccessMsg}
                 </p>
               )}
 
               <div>
                 <label className="text-xs font-medium text-silver block mb-1">
-                  Create Password (min. 6 characters)
+                  New Password (min. 6 characters)
                 </label>
                 <Input
                   type="password"
@@ -1907,7 +1910,7 @@ export default function FusionWallpapersApp() {
 
               <div>
                 <label className="text-xs font-medium text-silver block mb-1">
-                  Confirm Password
+                  Confirm New Password
                 </label>
                 <Input
                   type="password"
@@ -1933,7 +1936,7 @@ export default function FusionWallpapersApp() {
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Complete Setup & Continue"
+                  "Save New Password"
                 )}
               </Button>
             </form>
@@ -1960,7 +1963,7 @@ export default function FusionWallpapersApp() {
               </label>
               <Input
                 type="email"
-                 disabled
+                disabled
                 value={user?.email || ""}
                 className="bg-[#060B19]/60 border-blue-400/20 text-silver rounded-xl opacity-80 cursor-not-allowed"
               />
