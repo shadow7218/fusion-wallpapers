@@ -124,7 +124,7 @@ function maskEmailAddress(email?: string | null): string {
 function formatSupabaseAuthError(err: any): string {
   const msg = (err?.message || "").toLowerCase();
   if (msg.includes("rate limit") || err?.status === 429) {
-    return "Email limit reached on the free server. Please wait ~15 minutes before requesting another email, or sign in with an existing account.";
+    return "Email limit reached. Please wait ~15 minutes before requesting another email, or sign in with an existing account.";
   }
   if (msg.includes("invalid login credentials")) {
     return "Incorrect email or password. Please double-check and try again.";
@@ -154,6 +154,9 @@ export default function FusionWallpapersApp() {
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Dynamic aspect ratio tracking
+  const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
+  
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -165,15 +168,9 @@ export default function FusionWallpapersApp() {
   >("home");
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [activeCategory, setActiveCategory] = useState<string>("For You");
-  const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(
-    null
-  );
-  const [isWideExpanded, setIsWideExpanded] = useState<boolean>(false);
-  const [imageDimensions, setImageDimensions] = useState<{
-    isWide: boolean;
-    aspectRatio: number;
-  }>({ isWide: false, aspectRatio: 9 / 16 });
-
+  
+  const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
@@ -188,9 +185,7 @@ export default function FusionWallpapersApp() {
   const [authReason, setAuthReason] = useState<string>(
     "Sign in to save wallpapers and unlock full-resolution downloads."
   );
-  const [pendingIntent, setPendingIntent] = useState<PendingIntent | null>(
-    null
-  );
+  const [pendingIntent, setPendingIntent] = useState<PendingIntent | null>(null);
 
   const [authEmail, setAuthEmail] = useState<string>("");
   const [authPassword, setAuthPassword] = useState<string>("");
@@ -200,12 +195,10 @@ export default function FusionWallpapersApp() {
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState<number>(0);
 
-  const [isSettingsModalOpen, setIsSettingsModalOpen] =
-    useState<boolean>(false);
+  const [isSettingsModalOpen, setIsSettingsModalOpen] = useState<boolean>(false);
   const [editDisplayName, setEditDisplayName] = useState<string>("");
   const [newPasswordInput, setNewPasswordInput] = useState<string>("");
-  const [confirmNewPasswordInput, setConfirmNewPasswordInput] =
-    useState<string>("");
+  const [confirmNewPasswordInput, setConfirmNewPasswordInput] = useState<string>("");
   const [settingsLoading, setSettingsLoading] = useState<boolean>(false);
   const [settingsFeedback, setSettingsFeedback] = useState<{
     type: "success" | "error";
@@ -286,23 +279,6 @@ export default function FusionWallpapersApp() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectedWallpaper]);
 
-  useEffect(() => {
-    if (!selectedWallpaper) {
-      setIsWideExpanded(false);
-      return;
-    }
-    const img = new Image();
-    img.src = selectedWallpaper.image_url;
-    img.onload = () => {
-      const width = img.naturalWidth;
-      const height = img.naturalHeight;
-      const ratio = width / height;
-      const standardVerticalRatio = 9 / 16;
-      const isWide = ratio > standardVerticalRatio + 0.03;
-      setImageDimensions({ isWide, aspectRatio: ratio });
-    };
-  }, [selectedWallpaper]);
-
   const openWallpaperDetail = (wallpaper: Wallpaper) => {
     if (!selectedWallpaper) {
       window.history.pushState({ wallpaperId: wallpaper.id }, "");
@@ -310,7 +286,7 @@ export default function FusionWallpapersApp() {
     setSelectedWallpaper(wallpaper);
     setRelatedVisibleCount(6);
     setDownloadStatus(null);
-    setIsWideExpanded(false);
+    setIsExpanded(false);
     if (detailScrollRef.current) {
       detailScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
     }
@@ -319,7 +295,7 @@ export default function FusionWallpapersApp() {
   const closeWallpaperDetail = () => {
     setSelectedWallpaper(null);
     setDownloadStatus(null);
-    setIsWideExpanded(false);
+    setIsExpanded(false);
   };
 
   const fetchWallpapers = async () => {
@@ -898,19 +874,27 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
+  // --- REUSABLE DYNAMIC ASPECT RATIO GRID CARD ---
   const renderWallpaperCard = (
     item: Wallpaper,
     options?: { showRemoveSavedBtn?: boolean }
   ) => {
     const isSaved = savedIds.includes(item.id);
+    const ratio = imageRatios[item.id];
+    // A standard vertical mobile wallpaper is 9:16 (0.5625).
+    // If the image is 9:16 or taller, we constrain it to exactly 9:16.
+    const isTall = ratio !== undefined && ratio <= 0.57;
+
     return (
       <div
         key={item.id}
         onClick={() => openWallpaperDetail(item)}
-        className="break-inside-avoid group relative rounded-2xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_8px_30px_rgba(0,0,0,0.65)] cursor-pointer transition-all duration-300 hover:border-cyan-400/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.3)]"
+        className="break-inside-avoid group relative rounded-2xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_8px_30px_rgba(0,0,0,0.65)] cursor-pointer transition-all duration-300 hover:border-cyan-400/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.3)] mb-3.5"
       >
         <div
-          className="relative w-full overflow-hidden bg-[#050A18] aspect-[9/16] flex items-center justify-center"
+          className={`relative w-full overflow-hidden bg-[#050A18] flex items-center justify-center transition-all ${
+            isTall ? "aspect-[9/16]" : ""
+          }`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
@@ -918,8 +902,17 @@ export default function FusionWallpapersApp() {
             alt={item.title}
             loading="lazy"
             draggable={false}
+            onLoad={(e) => {
+              const { naturalWidth, naturalHeight } = e.currentTarget;
+              setImageRatios((prev) => ({
+                ...prev,
+                [item.id]: naturalWidth / naturalHeight,
+              }));
+            }}
             onContextMenu={(e) => e.preventDefault()}
-            className="w-full h-full object-cover pointer-events-none select-none transition-transform duration-500 group-hover:scale-[1.03]"
+            className={`w-full block pointer-events-none select-none transition-transform duration-500 group-hover:scale-[1.03] ${
+              isTall ? "h-full object-cover" : "h-auto object-cover"
+            }`}
           />
 
           <div
@@ -960,6 +953,10 @@ export default function FusionWallpapersApp() {
       </div>
     );
   };
+
+  // State checks for the detail view modal formatting
+  const detailRatio = selectedWallpaper ? imageRatios[selectedWallpaper.id] : undefined;
+  const detailIsTall = detailRatio !== undefined && detailRatio <= 0.57;
 
   return (
     <div
@@ -1461,69 +1458,65 @@ export default function FusionWallpapersApp() {
 
             {/* PREVIEW CONTAINER WITH NATURAL ASPECT RATIO (ZERO EMPTY SPACE) */}
             <div
-              className="relative rounded-3xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_15px_45px_rgba(0,0,0,0.8)] flex items-center justify-center"
+              className="relative rounded-3xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_15px_45px_rgba(0,0,0,0.8)] flex items-center justify-center mx-auto w-fit max-w-full"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <div
-                className={`w-full flex items-center justify-center transition-all duration-300 ${
-                  isWideExpanded
-                    ? "max-h-[85vh] overflow-x-auto"
-                    : "max-h-[72vh]"
+              <img
+                src={selectedWallpaper.image_url}
+                alt={selectedWallpaper.title}
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`block pointer-events-none select-none transition-all duration-300 ${
+                  detailIsTall && !isExpanded
+                    ? "w-full aspect-[9/16] object-cover sm:w-auto sm:h-[70vh]"
+                    : "w-full h-auto object-contain max-h-[80vh] sm:max-h-[85vh]"
                 }`}
-              >
-                <img
-                  src={selectedWallpaper.image_url}
-                  alt={selectedWallpaper.title}
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={`object-contain pointer-events-none select-none transition-all duration-300 ${
-                    isWideExpanded
-                      ? "w-full h-auto max-h-none"
-                      : "w-full max-h-[72vh]"
-                  }`}
-                />
-              </div>
+              />
 
               <div
                 className="absolute inset-0 z-10 bg-transparent"
                 onContextMenu={(e) => e.preventDefault()}
               />
 
-              {imageDimensions.isWide && (
+              {/* ONLY SHOW FULL-SCREEN EXPAND BUTTON IF WALLPAPER IS EXTREMELY TALL */}
+              {detailIsTall && !isExpanded && (
                 <button
                   type="button"
                   aria-label="Toggle full screen preview"
-                  onClick={() => setIsWideExpanded(!isWideExpanded)}
-                  className="absolute bottom-3 right-3 z-20 h-10 w-10 rounded-full bg-black/60 backdrop-blur-md border border-white/25 flex items-center justify-center text-white hover:bg-black/85 transition shadow-lg active:scale-95"
-                  title={
-                    isWideExpanded
-                      ? "Fit to 9:16 Frame"
-                      : "View Full Horizontal/Original"
-                  }
+                  onClick={() => setIsExpanded(true)}
+                  className="absolute bottom-4 bg-black/60 backdrop-blur-md px-5 py-2.5 rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-black/85 transition shadow-lg active:scale-95 text-sm font-semibold gap-2 z-20"
                 >
-                  {isWideExpanded ? (
-                    <Minimize2 className="h-5 w-5 text-cyan-400" />
-                  ) : (
-                    <Maximize2 className="h-5 w-5 text-cyan-400" />
-                  )}
+                  <Maximize2 className="h-4 w-4 text-cyan-400" />
+                  View Full Wallpaper
+                </button>
+              )}
+              
+              {detailIsTall && isExpanded && (
+                <button
+                  type="button"
+                  aria-label="Minimize preview"
+                  onClick={() => setIsExpanded(false)}
+                  className="absolute bottom-4 right-4 h-10 w-10 bg-black/60 backdrop-blur-md rounded-full border border-white/20 flex items-center justify-center text-white hover:bg-black/85 transition shadow-lg active:scale-95 z-20"
+                >
+                  <Minimize2 className="h-5 w-5 text-cyan-400" />
                 </button>
               )}
             </div>
 
-            <div className="mt-4 text-center sm:text-left">
+            <div className="mt-5 text-center sm:text-left">
               <h2 className="text-xl sm:text-2xl font-bold text-white tracking-wide">
                 {selectedWallpaper.title}
               </h2>
             </div>
 
             {/* MASSIVE HIGH-IMPACT LIQUID GLASS BUTTONS: SAVE FIRST, THEN DOWNLOAD */}
-            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
+            <div className="mt-5 flex flex-col gap-3.5 w-full">
               <Button
                 type="button"
                 variant="outline"
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`flex-1 h-14 rounded-full font-bold text-base border transition backdrop-blur-xl shadow-[0_0_20px_rgba(37,99,235,0.2)] ${
+                className={`w-full h-14 rounded-2xl font-bold text-base border transition backdrop-blur-xl shadow-[0_0_20px_rgba(37,99,235,0.2)] ${
                   savedIds.includes(selectedWallpaper.id)
                     ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500/30 shadow-[0_0_22px_rgba(56,189,248,0.4)]"
                     : "bg-[#0A1128]/90 border-blue-400/40 text-white hover:border-cyan-400/70"
@@ -1536,14 +1529,14 @@ export default function FusionWallpapersApp() {
                       : ""
                   }`}
                 />
-                {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
+                {savedIds.includes(selectedWallpaper.id) ? "Wallpaper Saved" : "Save Wallpaper"}
               </Button>
 
               <Button
                 type="button"
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-14 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-extrabold text-base shadow-[0_0_30px_rgba(56,189,248,0.5)] hover:opacity-95 transition"
+                className="w-full h-14 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-extrabold text-base shadow-[0_0_30px_rgba(56,189,248,0.5)] hover:opacity-95 transition"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
@@ -1553,7 +1546,7 @@ export default function FusionWallpapersApp() {
                 ) : (
                   <>
                     <Download className="h-5 w-5 mr-2.5" />
-                    Download
+                    Download Wallpaper
                   </>
                 )}
               </Button>
@@ -1561,7 +1554,7 @@ export default function FusionWallpapersApp() {
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
               <div
-                className={`mt-3 p-3.5 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${
+                className={`mt-4 p-3.5 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${
                   downloadStatus.type === "success"
                     ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200"
                     : "bg-red-950/70 border-red-400/40 text-red-200"
@@ -2082,7 +2075,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN ONLY UPLOAD MODAL (PRESERVED) ================= */}
+      {/* ================= ADMIN ONLY UPLOAD MODAL ================= */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
         <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6">
           <DialogHeader>
