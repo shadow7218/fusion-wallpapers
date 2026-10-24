@@ -1,0 +1,165 @@
+/* ==========================================================================
+   dashersw/liquid-glass-js — Core Glass Component Styles & Optical Shaders
+   Adapted for Next.js App Router with 60fps Hardware Acceleration
+   ========================================================================== */
+
+:root {
+  --lg-edge-intensity: 0.025;
+  --lg-rim-intensity: 0.14;
+  --lg-base-intensity: 0.015;
+  --lg-blur-radius: 18px;
+  --lg-tint-opacity: 0.22;
+}
+
+/* Base Glass Container (.glass-container from liquid-glass-js) */
+.glass-container {
+  position: relative;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, calc(var(--lg-tint-opacity, 0.22) * 0.85)) 0%,
+    rgba(255, 255, 255, calc(var(--lg-tint-opacity, 0.22) * 0.25)) 50%,
+    rgba(10, 14, 24, calc(var(--lg-tint-opacity, 0.22) * 1.6)) 100%
+  );
+  backdrop-filter: blur(var(--lg-blur-radius, 18px)) saturate(190%) contrast(108%);
+  -webkit-backdrop-filter: blur(var(--lg-blur-radius, 18px)) saturate(190%) contrast(108%);
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  box-shadow:
+    0 20px 45px rgba(0, 0, 0, 0.55),
+    inset 0 1.5px 2px rgba(255, 255, 255, 0.42),
+    inset 0 -1.5px 2px rgba(255, 255, 255, 0.12),
+    inset 1px 0 1.5px rgba(255, 255, 255, 0.18),
+    inset -1px 0 1.5px rgba(255, 255, 255, 0.18);
+  transition:
+    transform 0.22s cubic-bezier(0.34, 1.56, 0.64, 1),
+    box-shadow 0.22s ease,
+    border-color 0.22s ease,
+    background 0.22s ease;
+  isolation: isolate;
+}
+
+/* Specular Rim Highlight Layer (Simulates curved glass edge refraction) */
+.glass-container::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    160deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.08) 42%,
+    rgba(255, 255, 255, 0.02) 65%,
+    rgba(255, 255, 255, 0.32) 100%
+  );
+  -webkit-mask:
+    linear-gradient(#fff 0 0) content-box,
+    linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Inner Curvature Sheen */
+.glass-container::after {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  background: radial-gradient(
+    120% 90% at 50% 0%,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.04) 45%,
+    transparent 75%
+  );
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Shape Variants from liquid-glass-js */
+.glass-container-rounded {
+  border-radius: var(--lg-border-radius, 24px);
+}
+
+.glass-container-circle {
+  border-radius: 9999px;
+  aspect-ratio: 1 / 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.glass-container-pill {
+  border-radius: 9999px;
+}
+
+/* Interactive Glass Button (.glass-button from liquid-glass-js) */
+.glass-button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  box-shadow:
+    0 14px 32px rgba(0, 0, 0, 0.45),
+    inset 0 1.5px 2.5px rgba(255, 255, 255, 0.48),
+    inset 0 -1.5px 2px rgba(255, 255, 255, 0.14);
+}
+
+.glass-button:hover {
+  border-color: rgba(255, 255, 255, 0.36);
+  box-shadow:
+    0 18px 38px rgba(0, 0, 0, 0.55),
+    inset 0 2px 3px rgba(255, 255, 255, 0.6),
+    inset 0 -1.5px 2.5px rgba(255, 255, 255, 0.2);
+}
+
+.glass-button:active {
+  transform: scale(0.94);
+}
+
+.glass-button-circle {
+  border-radius: 9999px;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+}
+
+/* Active White Liquid Glass Pill (Used on Selected Filter Pill & Bottom Nav Active Tab) */
+.glass-active-white {
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(240, 244, 250, 0.92) 100%
+  ) !important;
+  color: #070707 !important;
+  border-color: rgba(255, 255, 255, 0.95) !important;
+  box-shadow:
+    0 8px 24px rgba(255, 255, 255, 0.25),
+    inset 0 2px 3px rgba(255, 255, 255, 1),
+    inset 0 -2px 4px rgba(0, 0, 0, 0.12) !important;
+}
+
+.glass-active-white .glass-button-text {
+  color: #070707 !important;
+  text-shadow: none !important;
+}
+
+/* Text Overlay (.glass-button-text from liquid-glass-js) */
+.glass-button-text {
+  position: relative;
+  z-index: 2;
+  color: #ffffff;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+}
+
+/* Optional Optical Warp Distortion (Uses SVG Displacement Filter) */
+.glass-warp {
+  backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 18px)) saturate(195%);
+  -webkit-backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 18px)) saturate(195%);
+}
