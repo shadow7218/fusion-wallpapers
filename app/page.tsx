@@ -871,6 +871,7 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
+  // --- PINTEREST CARD WITH FLOATING OVERLAY 3-DOT LIQUID GLASS MENU ---
   const renderWallpaperCard = (
     item: Wallpaper,
     options?: { showRemoveSavedBtn?: boolean }
@@ -883,7 +884,9 @@ export default function FusionWallpapersApp() {
     return (
       <div
         key={item.id}
-        className="break-inside-avoid mb-2.5 relative flex flex-col"
+        className={`break-inside-avoid mb-2.5 relative flex flex-col ${
+          isMenuOpen ? "z-50" : "z-10"
+        }`}
       >
         <div
           onClick={() => openWallpaperDetail(item)}
@@ -915,89 +918,87 @@ export default function FusionWallpapersApp() {
           />
         </div>
 
-        {/* Pinterest Title + 3-Dot Trigger */}
-        <div className="mt-1 px-0.5 flex items-center justify-between relative">
+        {/* Title + 3-Dot Trigger Row */}
+        <div className="mt-1 px-0.5 flex items-center justify-between">
           <h3 className="text-[11px] font-normal text-white/90 truncate max-w-[80%] tracking-tight">
             {item.title}
           </h3>
 
-          <div className="relative">
+          <button
+            type="button"
+            aria-label="Wallpaper options"
+            onClick={(e) => {
+              e.stopPropagation();
+              setMenuOpenWallpaperId(isMenuOpen ? null : item.id);
+            }}
+            className="h-5 w-5 rounded-md hover:bg-white/10 flex items-center justify-center text-white/80 transition active:scale-90"
+          >
+            <MoreHorizontal className="h-3.5 w-3.5" />
+          </button>
+        </div>
+
+        {/* FLOATING LIQUID GLASS POPUP OVER THE WALLPAPER (NEVER PUSHES LAYOUT) */}
+        {isMenuOpen && (
+          <GlassContainer
+            type="rounded"
+            borderRadius={20}
+            tintOpacity={0.14}
+            blurRadius={26}
+            warp={true}
+            className="absolute right-1.5 bottom-7 z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150"
+            onClick={(e) => e.stopPropagation()}
+          >
             <button
               type="button"
-              aria-label="Wallpaper options"
               onClick={(e) => {
                 e.stopPropagation();
-                setMenuOpenWallpaperId(isMenuOpen ? null : item.id);
+                setMenuOpenWallpaperId(null);
+                toggleSaveWallpaper(null, item);
               }}
-              className="h-5 w-5 rounded-md hover:bg-white/10 flex items-center justify-center text-white/80 transition active:scale-90"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
             >
-              <MoreHorizontal className="h-3.5 w-3.5" />
+              <Bookmark
+                className={`h-3.5 w-3.5 ${
+                  isSaved ? "fill-white text-white" : ""
+                }`}
+              />
+              <span>{isSaved ? "Saved" : "Save"}</span>
             </button>
 
-            {/* LIQUID GLASS 3-DOT POPUP BOX */}
-            {isMenuOpen && (
-              <GlassContainer
-                type="rounded"
-                borderRadius={16}
-                tintOpacity={0.35}
-                blurRadius={24}
-                warp={true}
-                className="absolute right-0 bottom-7 z-40 w-36 p-1 animate-in fade-in zoom-in-95 duration-150"
-                onClick={(e) => e.stopPropagation()}
+            <button
+              type="button"
+              onClick={(e) => handleShareWallpaper(e, item)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
+            >
+              <Share2 className="h-3.5 w-3.5" />
+              <span>Share</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                setMenuOpenWallpaperId(null);
+                triggerDirectDownload(item);
+              }}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
+            >
+              <Download className="h-3.5 w-3.5" />
+              <span>Download</span>
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={(e) => handleAdminDelete(e, item)}
+                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-300 hover:bg-red-950/50 transition border-t border-white/15 mt-0.5 pt-1.5"
               >
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpenWallpaperId(null);
-                    toggleSaveWallpaper(null, item);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[11px] font-medium text-white hover:bg-white/15 transition active:scale-95"
-                >
-                  <Bookmark
-                    className={`h-3.5 w-3.5 ${
-                      isSaved ? "fill-white text-white" : ""
-                    }`}
-                  />
-                  <span>{isSaved ? "Saved" : "Save"}</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => handleShareWallpaper(e, item)}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[11px] font-medium text-white hover:bg-white/15 transition active:scale-95"
-                >
-                  <Share2 className="h-3.5 w-3.5" />
-                  <span>Share</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setMenuOpenWallpaperId(null);
-                    triggerDirectDownload(item);
-                  }}
-                  className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[11px] font-medium text-white hover:bg-white/15 transition active:scale-95"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  <span>Download</span>
-                </button>
-
-                {isAdmin && (
-                  <button
-                    type="button"
-                    onClick={(e) => handleAdminDelete(e, item)}
-                    className="w-full flex items-center gap-2 px-2.5 py-2 rounded-xl text-[11px] font-medium text-red-300 hover:bg-red-950/50 transition border-t border-white/15 mt-0.5 pt-1.5"
-                  >
-                    <Trash2 className="h-3.5 w-3.5" />
-                    <span>Delete</span>
-                  </button>
-                )}
-              </GlassContainer>
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
             )}
-          </div>
-        </div>
+          </GlassContainer>
+        )}
       </div>
     );
   };
@@ -1012,7 +1013,6 @@ export default function FusionWallpapersApp() {
       className="min-h-screen bg-[#070707] text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
       onContextMenu={(e) => e.preventDefault()}
     >
-      {/* Inject Optical Refraction SVG Filter */}
       <LiquidGlassShaderDefs />
 
       {/* ================= LIQUID GLASS STICKY HEADER ================= */}
@@ -1055,7 +1055,7 @@ export default function FusionWallpapersApp() {
             {user ? (
               <GlassButton
                 typeShape="pill"
-                tintOpacity={0.25}
+                tintOpacity={0.22}
                 onClick={() => setActiveTab("profile")}
                 className="px-3.5 py-1.5 text-xs font-semibold"
               >
@@ -1067,7 +1067,7 @@ export default function FusionWallpapersApp() {
             ) : (
               <GlassButton
                 typeShape="pill"
-                tintOpacity={0.25}
+                tintOpacity={0.22}
                 onClick={() =>
                   requireAuthForAction(
                     "Sign in to save wallpapers and unlock full-resolution downloads.",
@@ -1090,8 +1090,8 @@ export default function FusionWallpapersApp() {
         <div className="max-w-5xl w-full mx-auto px-4 pt-3 pb-2 z-10 space-y-2.5">
           <GlassContainer
             type="pill"
-            tintOpacity={0.2}
-            blurRadius={20}
+            tintOpacity={0.18}
+            blurRadius={22}
             className="w-full h-11 px-4 flex items-center"
           >
             <div className="flex items-center w-full h-full">
@@ -1127,7 +1127,7 @@ export default function FusionWallpapersApp() {
                       key={pillName}
                       typeShape="pill"
                       activeWhite={isActive}
-                      tintOpacity={0.2}
+                      tintOpacity={0.18}
                       onClick={() => {
                         setSelectedPillCategory(pillName);
                         window.scrollTo({ top: 0, behavior: "smooth" });
@@ -1152,7 +1152,7 @@ export default function FusionWallpapersApp() {
               <GlassContainer
                 type="rounded"
                 borderRadius={28}
-                tintOpacity={0.22}
+                tintOpacity={0.2}
                 className="p-5 sm:p-6"
               >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
@@ -1469,15 +1469,15 @@ export default function FusionWallpapersApp() {
         </main>
       )}
 
-      {/* ================= LIQUID GLASS BOTTOM NAVIGATION DOCK (WITH WHITE PILL) ================= */}
+      {/* ================= LIQUID GLASS BOTTOM NAVIGATION DOCK ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
         className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
         <GlassContainer
           type="pill"
-          tintOpacity={0.28}
-          blurRadius={24}
+          tintOpacity={0.14}
+          blurRadius={26}
           warp={true}
           className="p-1.5"
         >
@@ -1574,7 +1574,7 @@ export default function FusionWallpapersApp() {
           role="dialog"
           aria-modal="true"
           aria-label={selectedWallpaper.title}
-          className="fixed inset-0 z-50 bg-black/90 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-black/92 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-150"
         >
           <div className="max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
             {/* TOP HEADER: BACK CIRCLE BUTTON, TITLE + CATEGORY, SHARE CIRCLE BUTTON */}
@@ -1582,7 +1582,7 @@ export default function FusionWallpapersApp() {
               <GlassButton
                 typeShape="circle"
                 size={40}
-                tintOpacity={0.28}
+                tintOpacity={0.22}
                 aria-label="Go back"
                 onClick={closeWallpaperDetail}
               >
@@ -1605,7 +1605,7 @@ export default function FusionWallpapersApp() {
               <GlassButton
                 typeShape="circle"
                 size={40}
-                tintOpacity={0.28}
+                tintOpacity={0.22}
                 aria-label="Share wallpaper"
                 onClick={(e) => handleShareWallpaper(e, selectedWallpaper)}
               >
@@ -1632,66 +1632,57 @@ export default function FusionWallpapersApp() {
               </div>
             )}
 
-            {/* WALLPAPER PREVIEW BOX */}
+            {/* PERFECT WALLPAPER BOX (EXACT IMAGE SIZE, ICON-ONLY EXPAND BUTTON IN TOP-LEFT CORNER) */}
             <div
-              className="relative rounded-3xl overflow-hidden bg-white/5 border border-white/20 shadow-2xl flex items-center justify-center mx-auto w-fit max-w-full mb-2.5"
+              className="relative inline-block rounded-3xl overflow-hidden bg-white/5 border border-white/20 shadow-2xl mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <div
-                className={`w-full flex items-center justify-center transition-all duration-300 ${
-                  isExpanded ? "max-h-[80vh] overflow-x-auto" : "max-h-[60vh]"
+              <img
+                src={selectedWallpaper.image_url}
+                alt={selectedWallpaper.title}
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`block pointer-events-none select-none transition-all duration-300 ${
+                  detailIsTall && !isExpanded
+                    ? "w-auto max-w-full max-h-[62vh] aspect-[9/16] object-cover"
+                    : "w-auto max-w-full h-auto max-h-[75vh] object-contain"
                 }`}
-              >
-                <img
-                  src={selectedWallpaper.image_url}
-                  alt={selectedWallpaper.title}
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={`block pointer-events-none select-none transition-all duration-300 ${
-                    detailIsTall && !isExpanded
-                      ? "w-full aspect-[9/16] object-cover sm:w-auto sm:h-[58vh]"
-                      : "w-full h-auto object-contain max-h-[62vh]"
-                  }`}
-                />
-              </div>
+              />
 
               <div
                 className="absolute inset-0 z-10 bg-transparent"
                 onContextMenu={(e) => e.preventDefault()}
               />
 
-              {detailIsTall && !isExpanded && (
-                <GlassButton
-                  typeShape="pill"
-                  tintOpacity={0.35}
-                  aria-label="Toggle full screen preview"
-                  onClick={() => setIsExpanded(true)}
-                  className="absolute bottom-3 px-4 py-2 text-xs font-bold z-20"
-                >
-                  <Maximize2 className="h-3.5 w-3.5" />
-                  <span>View Full Wallpaper</span>
-                </GlassButton>
-              )}
-
-              {detailIsTall && isExpanded && (
+              {/* TOP-LEFT CORNER ICON-ONLY FULL SCREEN BUTTON (NO TEXT) */}
+              {detailIsTall && (
                 <GlassButton
                   typeShape="circle"
-                  size={36}
-                  tintOpacity={0.35}
-                  aria-label="Minimize preview"
-                  onClick={() => setIsExpanded(false)}
-                  className="absolute bottom-3 right-3 z-20"
+                  size={38}
+                  tintOpacity={0.2}
+                  blurRadius={24}
+                  aria-label={
+                    isExpanded
+                      ? "Minimize wallpaper preview"
+                      : "View full wallpaper"
+                  }
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="absolute top-3 left-3 z-20"
                 >
-                  <Minimize2 className="h-3.5 w-3.5" />
+                  {isExpanded ? (
+                    <Minimize2 className="h-4 w-4 text-white" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4 text-white" />
+                  )}
                 </GlassButton>
               )}
             </div>
 
-            {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS (TIGHT SPACING) */}
+            {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS */}
             <div className="flex items-center gap-3 w-full max-w-md mb-5">
               <GlassButton
                 typeShape="pill"
-                tintOpacity={0.28}
+                tintOpacity={0.22}
                 activeWhite={savedIds.includes(selectedWallpaper.id)}
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
@@ -2258,7 +2249,7 @@ export default function FusionWallpapersApp() {
               <Input
                 type="text"
                 required
-                placeholder="e.g., Reze"
+                placeholder="e.g., Levi Ackerman"
                 value={uploadTitle}
                 onChange={(e) => setUploadTitle(e.target.value)}
                 className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-10 text-xs"
