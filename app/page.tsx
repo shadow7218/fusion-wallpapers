@@ -32,7 +32,6 @@ import {
   Share2,
   Image as ImageIcon,
   ChevronLeft,
-  UploadCloud,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -120,7 +119,6 @@ export default function FusionWallpapersApp() {
   const [savingInProgressIds, setSavingInProgressIds] = useState<string[]>([]);
   const [revealFullEmail, setRevealFullEmail] = useState<boolean>(false);
 
-  // VIEW STATES
   const [activeTab, setActiveTab] = useState<"home" | "explore" | "saved" | "profile">("home");
   const [exploreView, setExploreView] = useState<"grid" | "category">("grid");
   const [selectedExploreCategory, setSelectedExploreCategory] = useState<string | null>(null);
@@ -156,7 +154,6 @@ export default function FusionWallpapersApp() {
   const [settingsLoading, setSettingsLoading] = useState<boolean>(false);
   const [settingsFeedback, setSettingsFeedback] = useState<{ type: "success" | "error"; text: string } | null>(null);
 
-  // ADMIN STATES
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [uploadTitle, setUploadTitle] = useState<string>("");
   const [uploadCategory, setUploadCategory] = useState<string>("none");
@@ -677,10 +674,7 @@ export default function FusionWallpapersApp() {
     const isMenuOpen = menuOpenWallpaperId === item.id;
 
     return (
-      <div
-        key={item.id}
-        className="break-inside-avoid mb-2.5 relative flex flex-col"
-      >
+      <div key={item.id} className="break-inside-avoid mb-2.5 relative flex flex-col">
         <div
           onClick={() => openWallpaperDetail(item)}
           className={`relative w-full overflow-hidden rounded-2xl bg-white/5 border border-white/10 cursor-pointer active:scale-95 transition-transform duration-150 ${isTall ? "aspect-[9/16]" : ""}`}
@@ -800,11 +794,7 @@ export default function FusionWallpapersApp() {
             className="flex items-center gap-2 text-left focus:outline-none group active:scale-95 transition-transform"
           >
             <div className="h-7 w-7 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
-              <img
-                src="/logo.webp"
-                alt="Fusion Logo"
-                className="h-full w-full object-cover"
-              />
+              <img src="/logo.webp" alt="Fusion Logo" className="h-full w-full object-cover" />
             </div>
             <span className="text-base sm:text-lg font-black tracking-[0.2em] text-white uppercase">
               FUSION
@@ -1134,7 +1124,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= REFACTORED WALLPAPER DETAIL SCREEN (MATCHING REFERENCE IMAGE 1) ================= */}
+      {/* ================= REFACTORED WALLPAPER DETAIL SCREEN (DECREASED SPACING) ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1143,46 +1133,42 @@ export default function FusionWallpapersApp() {
           aria-label={selectedWallpaper.title}
           className="fixed inset-0 z-50 bg-black/95 backdrop-blur-3xl overflow-y-auto animate-in fade-in duration-150"
         >
-          <div className="max-w-3xl mx-auto px-4 pt-4 pb-16 flex flex-col items-center">
+          <div className="max-w-3xl mx-auto px-4 pt-3 pb-16 flex flex-col items-center">
             
-            {/* TOP HEADER: BACK BUTTON, TITLE + CATEGORY IN CENTER, SHARE BUTTON */}
-            <div className="w-full flex items-center justify-between mb-5">
-              {/* BACK BUTTON */}
+            {/* TOP HEADER */}
+            <div className="w-full flex items-center justify-between mb-3">
               <button
                 type="button"
                 aria-label="Go back"
                 onClick={closeWallpaperDetail}
-                className="h-11 w-11 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
+                className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
               >
-                <ChevronLeft className="h-6 w-6" />
+                <ChevronLeft className="h-5 w-5" />
               </button>
 
-              {/* CENTER TITLE & CATEGORY NAME */}
               <div className="text-center">
-                <h1 className="text-lg sm:text-xl font-bold text-white tracking-wide">
+                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
                   {selectedWallpaper.title}
                 </h1>
-                <p className="text-xs text-white/60 capitalize">
+                <p className="text-[11px] text-white/60 capitalize">
                   {selectedWallpaper.category 
                     ? animeCategories.find(c => c.id === selectedWallpaper.category)?.name || selectedWallpaper.category 
                     : "Uncategorized"}
                 </p>
               </div>
 
-              {/* SHARE BUTTON */}
               <button
                 type="button"
                 aria-label="Share wallpaper"
                 onClick={(e) => handleShareWallpaper(e, selectedWallpaper)}
-                className="h-11 w-11 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
+                className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
               >
-                <Share2 className="h-5 w-5" />
+                <Share2 className="h-4 w-4" />
               </button>
             </div>
 
-            {/* ADMIN EDIT BUTTON (IF ADMIN) */}
             {isAdmin && (
-              <div className="mb-3 w-full flex justify-end">
+              <div className="mb-2 w-full flex justify-end">
                 <button
                   type="button"
                   onClick={() => {
@@ -1190,16 +1176,16 @@ export default function FusionWallpapersApp() {
                     setEditSetAsBanner(!!selectedWallpaper.is_banner);
                     setIsEditModalOpen(true);
                   }}
-                  className="h-9 px-4 rounded-full bg-white/10 border border-white/20 flex items-center gap-1.5 text-white text-xs font-bold active:scale-95 transition-transform"
+                  className="h-8 px-3 rounded-full bg-white/10 border border-white/20 flex items-center gap-1.5 text-white text-[11px] font-bold active:scale-95 transition-transform"
                 >
-                  <Edit3 className="h-3.5 w-3.5" /> Edit Category
+                  <Edit3 className="h-3 w-3" /> Edit Category
                 </button>
               </div>
             )}
 
             {/* WALLPAPER PREVIEW CONTAINER */}
             <div
-              className="relative rounded-3xl overflow-hidden bg-white/5 border border-white/15 shadow-2xl flex items-center justify-center mx-auto w-fit max-w-full mb-6"
+              className="relative rounded-3xl overflow-hidden bg-white/5 border border-white/15 shadow-2xl flex items-center justify-center mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
             >
               <div className={`w-full flex items-center justify-center transition-all duration-300 ${isExpanded ? "max-h-[80vh] overflow-x-auto" : "max-h-[65vh]"}`}>
@@ -1208,7 +1194,7 @@ export default function FusionWallpapersApp() {
                   alt={selectedWallpaper.title}
                   draggable={false}
                   onContextMenu={(e) => e.preventDefault()}
-                  className={`block pointer-events-none select-none transition-all duration-300 ${detailIsTall && !isExpanded ? "w-full aspect-[9/16] object-cover sm:w-auto sm:h-[65vh]" : "w-full h-auto object-contain max-h-[70vh]"}`}
+                  className={`block pointer-events-none select-none transition-all duration-300 ${detailIsTall && !isExpanded ? "w-full aspect-[9/16] object-cover sm:w-auto sm:h-[62vh]" : "w-full h-auto object-contain max-h-[68vh]"}`}
                 />
               </div>
 
@@ -1219,9 +1205,9 @@ export default function FusionWallpapersApp() {
                   type="button"
                   aria-label="Toggle full screen preview"
                   onClick={() => setIsExpanded(true)}
-                  className="absolute bottom-4 bg-black/70 backdrop-blur-xl px-4 py-2 rounded-full border border-white/25 flex items-center justify-center text-white text-xs font-bold gap-2 z-20 active:scale-95 transition-transform"
+                  className="absolute bottom-3 bg-black/70 backdrop-blur-xl px-4 py-2 rounded-full border border-white/25 flex items-center justify-center text-white text-xs font-bold gap-2 z-20 active:scale-95 transition-transform"
                 >
-                  <Maximize2 className="h-3.5 w-3.5 text-white" />
+                  <Maximize2 className="h-3 w-3 text-white" />
                   View Full Wallpaper
                 </button>
               )}
@@ -1231,23 +1217,23 @@ export default function FusionWallpapersApp() {
                   type="button"
                   aria-label="Minimize preview"
                   onClick={() => setIsExpanded(false)}
-                  className="absolute bottom-4 right-4 h-9 w-9 bg-black/70 backdrop-blur-xl rounded-full border border-white/25 flex items-center justify-center text-white z-20 active:scale-90 transition-transform"
+                  className="absolute bottom-3 right-3 h-8 w-8 bg-black/70 backdrop-blur-xl rounded-full border border-white/25 flex items-center justify-center text-white z-20 active:scale-90 transition-transform"
                 >
-                  <Minimize2 className="h-3.5 w-3.5 text-white" />
+                  <Minimize2 className="h-3 w-3 text-white" />
                 </button>
               )}
             </div>
 
-            {/* SIDE-BY-SIDE SAVE AND DOWNLOAD BUTTONS (MATCHING REFERENCE IMAGE 1) */}
-            <div className="flex items-center gap-3.5 w-full max-w-lg mb-8">
+            {/* SIDE-BY-SIDE SAVE AND DOWNLOAD BUTTONS (TIGHTER SPACING) */}
+            <div className="flex items-center gap-3 w-full max-w-md mb-6">
               <Button
                 type="button"
                 variant="outline"
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`flex-1 h-14 rounded-full font-bold text-sm border transition backdrop-blur-2xl shadow-lg active:scale-95 transition-transform ${savedIds.includes(selectedWallpaper.id) ? "bg-white text-black border-white hover:bg-white/90" : "bg-white/10 border-white/20 text-white hover:bg-white/20"}`}
+                className={`flex-1 h-12 rounded-full font-bold text-xs border transition backdrop-blur-2xl shadow-lg active:scale-95 transition-transform ${savedIds.includes(selectedWallpaper.id) ? "bg-white text-black border-white hover:bg-white/90" : "bg-white/10 border-white/20 text-white hover:bg-white/20"}`}
               >
-                <Bookmark className={`h-5 w-5 mr-2 ${savedIds.includes(selectedWallpaper.id) ? "fill-black text-black" : ""}`} />
+                <Bookmark className={`h-4 w-4 mr-1.5 ${savedIds.includes(selectedWallpaper.id) ? "fill-black text-black" : ""}`} />
                 {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
               </Button>
 
@@ -1255,22 +1241,22 @@ export default function FusionWallpapersApp() {
                 type="button"
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-14 rounded-full bg-white text-black font-extrabold text-sm shadow-lg hover:bg-white/90 active:scale-95 transition-transform"
+                className="flex-1 h-12 rounded-full bg-white text-black font-extrabold text-xs shadow-lg hover:bg-white/90 active:scale-95 transition-transform"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Downloading...
+                    <Loader2 className="h-3.5 w-3.5 animate-spin mr-1.5" /> Downloading...
                   </>
                 ) : (
                   <>
-                    <Download className="h-5 w-5 mr-2" /> Download
+                    <Download className="h-4 w-4 mr-1.5" /> Download
                   </>
                 )}
               </Button>
             </div>
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
-              <div className={`mb-6 w-full max-w-lg p-3.5 rounded-2xl border text-xs flex items-center justify-between backdrop-blur-xl ${downloadStatus.type === "success" ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200" : "bg-red-950/70 border-red-400/40 text-red-200"}`}>
+              <div className={`mb-4 w-full max-w-md p-3 rounded-2xl border text-xs flex items-center justify-between backdrop-blur-xl ${downloadStatus.type === "success" ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200" : "bg-red-950/70 border-red-400/40 text-red-200"}`}>
                 <div className="flex items-center gap-2">
                   {downloadStatus.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" /> : <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />}
                   <span>{downloadStatus.message}</span>
@@ -1282,18 +1268,18 @@ export default function FusionWallpapersApp() {
             )}
 
             {/* RELATED WALLPAPERS SECTION */}
-            <div className="w-full pt-4 border-t border-white/10">
-              <h3 className="text-base sm:text-lg font-bold text-white tracking-wide mb-4">Related wallpapers</h3>
+            <div className="w-full pt-3 border-t border-white/10">
+              <h3 className="text-sm font-bold text-white tracking-wide mb-3">Related wallpapers</h3>
               {relatedWallpapers.length === 0 ? (
                 <p className="text-xs text-white/50">More wallpapers coming soon.</p>
               ) : (
                 <>
-                  <div className="columns-2 sm:columns-3 gap-3 space-y-3">
+                  <div className="columns-2 sm:columns-3 gap-2.5 space-y-2.5">
                     {relatedWallpapers.slice(0, relatedVisibleCount).map((rel) => renderWallpaperCard(rel))}
                   </div>
                   {relatedVisibleCount < relatedWallpapers.length && (
-                    <div className="mt-5 text-center">
-                      <Button type="button" variant="outline" onClick={() => setRelatedVisibleCount((prev) => prev + 6)} className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20 px-5 h-10 active:scale-95 transition-transform text-xs font-semibold">
+                    <div className="mt-4 text-center">
+                      <Button type="button" variant="outline" onClick={() => setRelatedVisibleCount((prev) => prev + 6)} className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20 px-4 h-9 active:scale-95 transition-transform text-xs font-semibold">
                         Load More Related
                       </Button>
                     </div>
@@ -1550,7 +1536,7 @@ export default function FusionWallpapersApp() {
             </div>
 
             <Button type="submit" disabled={editingWallpaper} className="w-full h-11 rounded-xl mt-1 bg-white text-black font-extrabold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform">
-              {editingWallpaper ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...",</> : "Save Changes"}
+              {editingWallpaper ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</> : "Save Changes"}
             </Button>
           </form>
         </DialogContent>
