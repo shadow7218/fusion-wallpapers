@@ -42,7 +42,7 @@ import {
 } from "@/components/ui/dialog";
 
 // Import your centralized categories config
-import { animeCategories } from "../config/animeCategories";
+import { animeCategories } from "./config/animeCategories";
 
 // --- DATA INTERFACES ---
 interface Wallpaper {
