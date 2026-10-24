@@ -286,7 +286,6 @@ export default function FusionWallpapersApp() {
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectedWallpaper]);
 
-  // Measure image dimensions to determine if it is wider/longer than 9:16
   useEffect(() => {
     if (!selectedWallpaper) {
       setIsWideExpanded(false);
@@ -298,9 +297,8 @@ export default function FusionWallpapersApp() {
       const width = img.naturalWidth;
       const height = img.naturalHeight;
       const ratio = width / height;
-      // Standard vertical 9:16 ratio is ~0.5625. If ratio > 0.58, it's wider/longer than strict 9:16
       const standardVerticalRatio = 9 / 16;
-      const isWide = ratio > standardVerticalRatio + 0.02;
+      const isWide = ratio > standardVerticalRatio + 0.03;
       setImageDimensions({ isWide, aspectRatio: ratio });
     };
   }, [selectedWallpaper]);
@@ -1440,7 +1438,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN WITH FULL-SCREEN TOGGLE & REORDERED BUTTONS ================= */}
+      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN (ZERO EMPTY SPACE + HIGH-IMPACT BUTTONS) ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1461,7 +1459,7 @@ export default function FusionWallpapersApp() {
               </button>
             </div>
 
-            {/* PREVIEW CONTAINER WITH CONDITIONAL FULL-SCREEN / EXPAND BUTTON */}
+            {/* PREVIEW CONTAINER WITH NATURAL ASPECT RATIO (ZERO EMPTY SPACE) */}
             <div
               className="relative rounded-3xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_15px_45px_rgba(0,0,0,0.8)] flex items-center justify-center"
               onContextMenu={(e) => e.preventDefault()}
@@ -1470,7 +1468,7 @@ export default function FusionWallpapersApp() {
                 className={`w-full flex items-center justify-center transition-all duration-300 ${
                   isWideExpanded
                     ? "max-h-[85vh] overflow-x-auto"
-                    : "max-h-[70vh]"
+                    : "max-h-[72vh]"
                 }`}
               >
                 <img
@@ -1481,7 +1479,7 @@ export default function FusionWallpapersApp() {
                   className={`object-contain pointer-events-none select-none transition-all duration-300 ${
                     isWideExpanded
                       ? "w-full h-auto max-h-none"
-                      : "w-full max-h-[70vh]"
+                      : "w-full max-h-[72vh]"
                   }`}
                 />
               </div>
@@ -1491,7 +1489,6 @@ export default function FusionWallpapersApp() {
                 onContextMenu={(e) => e.preventDefault()}
               />
 
-              {/* ONLY SHOW FULL-SCREEN EXPAND BUTTON IF WALLPAPER IS WIDER/LONGER THAN STRICT 9:16 */}
               {imageDimensions.isWide && (
                 <button
                   type="button"
@@ -1519,21 +1516,21 @@ export default function FusionWallpapersApp() {
               </h2>
             </div>
 
-            {/* BUTTON REORDERED: SAVE BUTTON FIRST, THEN DOWNLOAD BUTTON WITH IDENTICAL LIQUID GLASS STYLING */}
-            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3">
+            {/* MASSIVE HIGH-IMPACT LIQUID GLASS BUTTONS: SAVE FIRST, THEN DOWNLOAD */}
+            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-center gap-3.5">
               <Button
                 type="button"
                 variant="outline"
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`flex-1 h-12 rounded-full font-semibold text-sm sm:text-base border transition backdrop-blur-xl shadow-[0_0_20px_rgba(37,99,235,0.2)] ${
+                className={`flex-1 h-14 rounded-full font-bold text-base border transition backdrop-blur-xl shadow-[0_0_20px_rgba(37,99,235,0.2)] ${
                   savedIds.includes(selectedWallpaper.id)
-                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500/30 shadow-[0_0_20px_rgba(56,189,248,0.35)]"
-                    : "bg-[#0A1128]/85 border-blue-400/35 text-white hover:border-cyan-400/70"
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-300 hover:bg-cyan-500/30 shadow-[0_0_22px_rgba(56,189,248,0.4)]"
+                    : "bg-[#0A1128]/90 border-blue-400/40 text-white hover:border-cyan-400/70"
                 }`}
               >
                 <Bookmark
-                  className={`h-5 w-5 mr-2 ${
+                  className={`h-5 w-5 mr-2.5 ${
                     savedIds.includes(selectedWallpaper.id)
                       ? "fill-cyan-400 text-cyan-400"
                       : ""
@@ -1546,17 +1543,17 @@ export default function FusionWallpapersApp() {
                 type="button"
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-12 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm sm:text-base shadow-[0_0_25px_rgba(56,189,248,0.45)] hover:opacity-95 transition"
+                className="flex-1 h-14 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-extrabold text-base shadow-[0_0_30px_rgba(56,189,248,0.5)] hover:opacity-95 transition"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
-                    <Loader2 className="h-5 w-5 animate-spin mr-2" />
+                    <Loader2 className="h-5 w-5 animate-spin mr-2.5" />
                     Preparing Original File...
                   </>
                 ) : (
                   <>
-                    <Download className="h-5 w-5 mr-2" />
-                    Download Wallpaper
+                    <Download className="h-5 w-5 mr-2.5" />
+                    Download
                   </>
                 )}
               </Button>
@@ -1564,7 +1561,7 @@ export default function FusionWallpapersApp() {
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
               <div
-                className={`mt-3 p-3 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${
+                className={`mt-3 p-3.5 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${
                   downloadStatus.type === "success"
                     ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200"
                     : "bg-red-950/70 border-red-400/40 text-red-200"
