@@ -1,0 +1,15 @@
+{
+  "name": "Fusion Wallpapers",
+  "short_name": "Fusion",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#070707",
+  "theme_color": "#070707",
+  "icons": [
+    {
+      "src": "/logo.webp",
+      "sizes": "192x192 512x512",
+      "type": "image/webp"
+    }
+  ]
+}
