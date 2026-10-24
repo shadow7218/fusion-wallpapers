@@ -26,10 +26,6 @@ export interface GlassButtonProps
   children: React.ReactNode;
 }
 
-/**
- * SVG Optical Refraction Filter Engine
- * Provides real-time edge & base refraction without html2canvas lag
- */
 export function LiquidGlassShaderDefs() {
   return (
     <svg
@@ -66,16 +62,13 @@ export function LiquidGlassShaderDefs() {
   );
 }
 
-/**
- * Port of Container class from dashersw/liquid-glass-js (container.js)
- */
 export const GlassContainer = React.forwardRef<HTMLDivElement, GlassContainerProps>(
   (
     {
       type = "rounded",
       borderRadius = 24,
-      tintOpacity = 0.22,
-      blurRadius = 18,
+      tintOpacity = 0.18,
+      blurRadius = 22,
       warp = false,
       activeWhite = false,
       className = "",
@@ -92,6 +85,9 @@ export const GlassContainer = React.forwardRef<HTMLDivElement, GlassContainerPro
         ? "glass-container-pill"
         : "glass-container-rounded";
 
+    const hasCustomPosition = /\b(absolute|fixed|sticky)\b/.test(className);
+    const positionClass = hasCustomPosition ? "" : "relative";
+
     const customStyles: React.CSSProperties = {
       "--lg-border-radius": `${borderRadius}px`,
       "--lg-tint-opacity": tintOpacity,
@@ -103,7 +99,7 @@ export const GlassContainer = React.forwardRef<HTMLDivElement, GlassContainerPro
       <div
         ref={ref}
         style={customStyles}
-        className={`glass-container ${shapeClass} ${
+        className={`${positionClass} glass-container ${shapeClass} ${
           warp ? "glass-warp" : ""
         } ${activeWhite ? "glass-active-white" : ""} ${className}`}
         {...props}
@@ -115,17 +111,14 @@ export const GlassContainer = React.forwardRef<HTMLDivElement, GlassContainerPro
 );
 GlassContainer.displayName = "GlassContainer";
 
-/**
- * Port of Button class from dashersw/liquid-glass-js (button.js)
- */
 export const GlassButton = React.forwardRef<HTMLButtonElement, GlassButtonProps>(
   (
     {
       typeShape = "pill",
       size,
       borderRadius = 20,
-      tintOpacity = 0.26,
-      blurRadius = 18,
+      tintOpacity = 0.22,
+      blurRadius = 22,
       warp = false,
       activeWhite = false,
       className = "",
@@ -142,6 +135,9 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, GlassButtonProps>
         ? "glass-container-pill"
         : "glass-container-rounded";
 
+    const hasCustomPosition = /\b(absolute|fixed|sticky)\b/.test(className);
+    const positionClass = hasCustomPosition ? "" : "relative";
+
     const customStyles: React.CSSProperties = {
       "--lg-border-radius": `${borderRadius}px`,
       "--lg-tint-opacity": tintOpacity,
@@ -157,7 +153,7 @@ export const GlassButton = React.forwardRef<HTMLButtonElement, GlassButtonProps>
         ref={ref}
         type={props.type || "button"}
         style={customStyles}
-        className={`glass-container glass-button ${shapeClass} ${
+        className={`${positionClass} glass-container glass-button ${shapeClass} ${
           warp ? "glass-warp" : ""
         } ${activeWhite ? "glass-active-white" : ""} ${className}`}
         {...props}
