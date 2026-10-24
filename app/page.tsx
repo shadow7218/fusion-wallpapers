@@ -11,9 +11,13 @@ import {
   Loader2,
   Trash2,
   Search,
+  SlidersHorizontal,
   Bookmark,
   Home,
   Compass,
+  Moon,
+  Mountain,
+  Smartphone,
   Sparkles,
   X,
   Check,
@@ -41,8 +45,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// Import your centralized categories config
-import { animeCategories } from "./config/animeCategories";
+// Import your centralized categories config (Adjust path if needed: "./config/animeCategories" or "../config/animeCategories")
+import { animeCategories } from "../config/animeCategories";
 
 // --- DATA INTERFACES ---
 interface Wallpaper {
@@ -134,7 +138,7 @@ export default function FusionWallpapersApp() {
   const [searchQuery, setSearchQuery] = useState<string>("");
 
   const [selectedWallpaper, setSelectedWallpaper] = useState<Wallpaper | null>(null);
-  const [isWideExpanded, setIsWideExpanded] = useState<boolean>(false);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [imageDimensions, setImageDimensions] = useState<{ isWide: boolean; aspectRatio: number }>({ isWide: false, aspectRatio: 9 / 16 });
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
@@ -221,7 +225,7 @@ export default function FusionWallpapersApp() {
 
   useEffect(() => {
     if (!selectedWallpaper) {
-      setIsWideExpanded(false);
+      setIsExpanded(false);
       return;
     }
     const img = new Image();
@@ -238,14 +242,14 @@ export default function FusionWallpapersApp() {
     setSelectedWallpaper(wallpaper);
     setRelatedVisibleCount(6);
     setDownloadStatus(null);
-    setIsWideExpanded(false);
+    setIsExpanded(false);
     if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
   };
 
   const closeWallpaperDetail = () => {
     setSelectedWallpaper(null);
     setDownloadStatus(null);
-    setIsWideExpanded(false);
+    setIsExpanded(false);
   };
 
   const fetchWallpapers = async () => {
@@ -1052,7 +1056,7 @@ export default function FusionWallpapersApp() {
               className="relative rounded-3xl overflow-hidden bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/30 shadow-[0_15px_45px_rgba(0,0,0,0.8)] flex items-center justify-center mx-auto w-fit max-w-full"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <div className={`w-full flex items-center justify-center transition-all duration-300 ${isWideExpanded ? "max-h-[85vh] overflow-x-auto" : "max-h-[72vh]"}`}>
+              <div className={`w-full flex items-center justify-center transition-all duration-300 ${isExpanded ? "max-h-[85vh] overflow-x-auto" : "max-h-[72vh]"}`}>
                 <img
                   src={selectedWallpaper.image_url}
                   alt={selectedWallpaper.title}
