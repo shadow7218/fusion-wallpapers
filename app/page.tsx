@@ -71,6 +71,13 @@ interface PendingIntent {
   wallpaper?: Wallpaper;
 }
 
+interface ActiveMenuState {
+  wallpaper: Wallpaper;
+  top?: number;
+  bottom?: number;
+  left: number;
+}
+
 type AuthStep =
   | "SIGN_IN"
   | "SIGN_UP"
@@ -140,9 +147,8 @@ export default function FusionWallpapersApp() {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
-  const [menuOpenWallpaperId, setMenuOpenWallpaperId] = useState<string | null>(
-    null
-  );
+  // Screen-aware 3-dot menu state (never clips or goes off-screen)
+  const [activeMenu, setActiveMenu] = useState<ActiveMenuState | null>(null);
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<{
@@ -238,10 +244,17 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  // Close 3-dot menu on outside tap or scroll so it never floats awkwardly
   useEffect(() => {
-    const handleClickOutside = () => setMenuOpenWallpaperId(null);
-    window.addEventListener("click", handleClickOutside);
-    return () => window.removeEventListener("click", handleClickOutside);
+    const closeMenu = () => setActiveMenu(null);
+    window.addEventListener("click", closeMenu);
+    window.addEventListener("scroll", closeMenu, true);
+    window.addEventListener("resize", closeMenu);
+    return () => {
+      window.removeEventListener("click", closeMenu);
+      window.removeEventListener("scroll", closeMenu, true);
+      window.removeEventListener("resize", closeMenu);
+    };
   }, []);
 
   useEffect(() => {
@@ -262,6 +275,7 @@ export default function FusionWallpapersApp() {
   }, [selectedWallpaper]);
 
   const openWallpaperDetail = (wallpaper: Wallpaper) => {
+    setActiveMenu(null);
     if (!selectedWallpaper)
       window.history.pushState({ wallpaperId: wallpaper.id }, "");
     setSelectedWallpaper(wallpaper);
@@ -622,7 +636,7 @@ export default function FusionWallpapersApp() {
     wallpaper: Wallpaper
   ) => {
     e.stopPropagation();
-    setMenuOpenWallpaperId(null);
+    setActiveMenu(null);
     if (navigator.share) {
       try {
         await navigator.share({
@@ -760,7 +774,7 @@ export default function FusionWallpapersApp() {
     wallpaper: Wallpaper
   ) => {
     e.stopPropagation();
-    setMenuOpenWallpaperId(null);
+    setActiveMenu(null);
     if (!isAdmin) return;
     if (!window.confirm(`Delete "${wallpaper.title}" permanently?`)) return;
 
@@ -871,22 +885,61 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
-  // --- PINTEREST CARD WITH FLOATING OVERLAY 3-DOT LIQUID GLASS MENU ---
+  // --- SMART SCREEN-AWARE 3-DOT MENU HANDLER ---
+  const handleToggleCardMenu = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    item: Wallpaper
+  ) => {
+    e.stopPropagation();
+    if (activeMenu?.wallpaper.id === item.id) {
+      setActiveMenu(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 160;
+    const menuApproxHeight = isAdmin ? 175 : 135;
+
+    // Keep menu safely inside left/right screen edges
+    const left = Math.min(
+      Math.max(12, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 12
+    );
+
+    // If the 3-dot button is in the upper part of the screen (e.g. short wallpaper near search bar),
+    // open the menu DOWNWARD so it never overlaps the search bar or category pills!
+    // Otherwise open UPWARD above the 3-dot button.
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    if (spaceAbove < menuApproxHeight + 130 && spaceBelow > menuApproxHeight) {
+      setActiveMenu({
+        wallpaper: item,
+        top: rect.bottom + 6,
+        left,
+      });
+    } else {
+      setActiveMenu({
+        wallpaper: item,
+        bottom: window.innerHeight - rect.top + 6,
+        left,
+      });
+    }
+  };
+
+  // --- PINTEREST CARD ---
   const renderWallpaperCard = (
     item: Wallpaper,
     options?: { showRemoveSavedBtn?: boolean }
   ) => {
-    const isSaved = savedIds.includes(item.id);
     const ratio = imageRatios[item.id];
     const isTall = ratio !== undefined && ratio <= 0.57;
-    const isMenuOpen = menuOpenWallpaperId === item.id;
+    const isMenuOpen = activeMenu?.wallpaper.id === item.id;
 
     return (
       <div
         key={item.id}
-        className={`break-inside-avoid mb-2.5 relative flex flex-col ${
-          isMenuOpen ? "z-50" : "z-10"
-        }`}
+        className="break-inside-avoid mb-2.5 relative flex flex-col"
       >
         <div
           onClick={() => openWallpaperDetail(item)}
@@ -927,78 +980,16 @@ export default function FusionWallpapersApp() {
           <button
             type="button"
             aria-label="Wallpaper options"
-            onClick={(e) => {
-              e.stopPropagation();
-              setMenuOpenWallpaperId(isMenuOpen ? null : item.id);
-            }}
-            className="h-5 w-5 rounded-md hover:bg-white/10 flex items-center justify-center text-white/80 transition active:scale-90"
+            onClick={(e) => handleToggleCardMenu(e, item)}
+            className={`h-5 w-5 rounded-md flex items-center justify-center transition active:scale-90 ${
+              isMenuOpen
+                ? "bg-white/20 text-white"
+                : "text-white/80 hover:bg-white/10"
+            }`}
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
         </div>
-
-        {/* FLOATING LIQUID GLASS POPUP OVER THE WALLPAPER (NEVER PUSHES LAYOUT) */}
-        {isMenuOpen && (
-          <GlassContainer
-            type="rounded"
-            borderRadius={20}
-            tintOpacity={0.14}
-            blurRadius={26}
-            warp={true}
-            className="absolute right-1.5 bottom-7 z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpenWallpaperId(null);
-                toggleSaveWallpaper(null, item);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
-            >
-              <Bookmark
-                className={`h-3.5 w-3.5 ${
-                  isSaved ? "fill-white text-white" : ""
-                }`}
-              />
-              <span>{isSaved ? "Saved" : "Save"}</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={(e) => handleShareWallpaper(e, item)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
-            >
-              <Share2 className="h-3.5 w-3.5" />
-              <span>Share</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpenWallpaperId(null);
-                triggerDirectDownload(item);
-              }}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white hover:bg-white/15 transition active:scale-95"
-            >
-              <Download className="h-3.5 w-3.5" />
-              <span>Download</span>
-            </button>
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={(e) => handleAdminDelete(e, item)}
-                className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-300 hover:bg-red-950/50 transition border-t border-white/15 mt-0.5 pt-1.5"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-                <span>Delete</span>
-              </button>
-            )}
-          </GlassContainer>
-        )}
       </div>
     );
   };
@@ -1014,6 +1005,85 @@ export default function FusionWallpapersApp() {
       onContextMenu={(e) => e.preventDefault()}
     >
       <LiquidGlassShaderDefs />
+
+      {/* ================= SCREEN-AWARE FLOATING LIQUID GLASS 3-DOT MENU ================= */}
+      {activeMenu && (
+        <GlassContainer
+          type="rounded"
+          borderRadius={20}
+          tintOpacity={0.28}
+          blurRadius={28}
+          warp={true}
+          style={{
+            top: activeMenu.top !== undefined ? `${activeMenu.top}px` : "auto",
+            bottom:
+              activeMenu.bottom !== undefined
+                ? `${activeMenu.bottom}px`
+                : "auto",
+            left: `${activeMenu.left}px`,
+            background:
+              "linear-gradient(145deg, rgba(18, 22, 32, 0.78) 0%, rgba(10, 12, 18, 0.86) 100%)",
+          }}
+          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const target = activeMenu.wallpaper;
+              setActiveMenu(null);
+              toggleSaveWallpaper(null, target);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
+          >
+            <Bookmark
+              className={`h-3.5 w-3.5 ${
+                savedIds.includes(activeMenu.wallpaper.id)
+                  ? "fill-white text-white"
+                  : ""
+              }`}
+            />
+            <span>
+              {savedIds.includes(activeMenu.wallpaper.id) ? "Saved" : "Save"}
+            </span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => handleShareWallpaper(e, activeMenu.wallpaper)}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
+          >
+            <Share2 className="h-3.5 w-3.5" />
+            <span>Share</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              const target = activeMenu.wallpaper;
+              setActiveMenu(null);
+              triggerDirectDownload(target);
+            }}
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
+          >
+            <Download className="h-3.5 w-3.5" />
+            <span>Download</span>
+          </button>
+
+          {isAdmin && (
+            <button
+              type="button"
+              onClick={(e) => handleAdminDelete(e, activeMenu.wallpaper)}
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-red-950/50 transition border-t border-white/15 mt-0.5 pt-1.5"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+              <span>Delete</span>
+            </button>
+          )}
+        </GlassContainer>
+      )}
 
       {/* ================= LIQUID GLASS STICKY HEADER ================= */}
       <header className="sticky top-0 z-30 bg-[#070707]/75 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
@@ -1654,7 +1724,7 @@ export default function FusionWallpapersApp() {
                 onContextMenu={(e) => e.preventDefault()}
               />
 
-              {/* TOP-LEFT CORNER ICON-ONLY FULL SCREEN BUTTON (NO TEXT) */}
+              {/* TOP-LEFT CORNER ICON-ONLY FULL SCREEN BUTTON */}
               {detailIsTall && (
                 <GlassButton
                   typeShape="circle"
