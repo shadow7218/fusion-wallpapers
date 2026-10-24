@@ -71,6 +71,13 @@ interface PendingIntent {
   wallpaper?: Wallpaper;
 }
 
+interface ActiveMenuState {
+  wallpaper: Wallpaper;
+  top?: number;
+  bottom?: number;
+  left: number;
+}
+
 type AuthStep =
   | "SIGN_IN"
   | "SIGN_UP"
@@ -140,12 +147,8 @@ export default function FusionWallpapersApp() {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
-  const [activeMenu, setActiveMenu] = useState<{
-    wallpaper: Wallpaper;
-    top?: number;
-    bottom?: number;
-    left: number;
-  } | null>(null);
+  // Screen-aware 3-dot menu state (never clips or goes off-screen)
+  const [activeMenu, setActiveMenu] = useState<ActiveMenuState | null>(null);
 
   const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [downloadStatus, setDownloadStatus] = useState<{
@@ -241,6 +244,7 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  // Close 3-dot menu on outside tap or scroll so it never floats awkwardly
   useEffect(() => {
     const closeMenu = () => setActiveMenu(null);
     window.addEventListener("click", closeMenu);
@@ -896,11 +900,15 @@ export default function FusionWallpapersApp() {
     const menuWidth = 160;
     const menuApproxHeight = isAdmin ? 175 : 135;
 
+    // Keep menu safely inside left/right screen edges
     const left = Math.min(
       Math.max(12, rect.right - menuWidth),
       window.innerWidth - menuWidth - 12
     );
 
+    // If the 3-dot button is in the upper part of the screen (e.g. short wallpaper near search bar),
+    // open the menu DOWNWARD so it never overlaps the search bar or category pills!
+    // Otherwise open UPWARD above the 3-dot button.
     const spaceAbove = rect.top;
     const spaceBelow = window.innerHeight - rect.bottom;
 
@@ -919,11 +927,11 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  // --- PINTEREST CARD ---
   const renderWallpaperCard = (
     item: Wallpaper,
     options?: { showRemoveSavedBtn?: boolean }
   ) => {
-    const isSaved = savedIds.includes(item.id);
     const ratio = imageRatios[item.id];
     const isTall = ratio !== undefined && ratio <= 0.57;
     const isMenuOpen = activeMenu?.wallpaper.id === item.id;
@@ -963,7 +971,8 @@ export default function FusionWallpapersApp() {
           />
         </div>
 
-        <div className="mt-1 px-0.5 flex items-center justify-between relative">
+        {/* Title + 3-Dot Trigger Row */}
+        <div className="mt-1 px-0.5 flex items-center justify-between">
           <h3 className="text-[11px] font-normal text-white/90 truncate max-w-[80%] tracking-tight">
             {item.title}
           </h3>
@@ -978,7 +987,7 @@ export default function FusionWallpapersApp() {
                 : "text-white/80 hover:bg-white/10"
             }`}
           >
-            <MoreHorizontal className="h-3 w-3" />
+            <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
         </div>
       </div>
@@ -997,12 +1006,12 @@ export default function FusionWallpapersApp() {
     >
       <LiquidGlassShaderDefs />
 
-      {/* ================= SMART SCREEN-AWARE 3-DOT MENU (SMOKED DARK LIQUID GLASS) ================= */}
+      {/* ================= SCREEN-AWARE FLOATING LIQUID GLASS 3-DOT MENU ================= */}
       {activeMenu && (
         <GlassContainer
           type="rounded"
           borderRadius={20}
-          tintOpacity={0.35}
+          tintOpacity={0.28}
           blurRadius={28}
           warp={true}
           style={{
@@ -1013,9 +1022,9 @@ export default function FusionWallpapersApp() {
                 : "auto",
             left: `${activeMenu.left}px`,
             background:
-              "linear-gradient(145deg, rgba(14, 18, 28, 0.92) 0%, rgba(6, 8, 14, 0.96) 100%)",
+              "linear-gradient(145deg, rgba(18, 22, 32, 0.78) 0%, rgba(10, 12, 18, 0.86) 100%)",
           }}
-          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
+          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -1026,7 +1035,7 @@ export default function FusionWallpapersApp() {
               setActiveMenu(null);
               toggleSaveWallpaper(null, target);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/20 transition active:scale-95"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
           >
             <Bookmark
               className={`h-3.5 w-3.5 ${
@@ -1043,7 +1052,7 @@ export default function FusionWallpapersApp() {
           <button
             type="button"
             onClick={(e) => handleShareWallpaper(e, activeMenu.wallpaper)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/20 transition active:scale-95"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
           >
             <Share2 className="h-3.5 w-3.5" />
             <span>Share</span>
@@ -1057,7 +1066,7 @@ export default function FusionWallpapersApp() {
               setActiveMenu(null);
               triggerDirectDownload(target);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/20 transition active:scale-95"
+            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-white drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-white/15 transition active:scale-95"
           >
             <Download className="h-3.5 w-3.5" />
             <span>Download</span>
@@ -1067,7 +1076,7 @@ export default function FusionWallpapersApp() {
             <button
               type="button"
               onClick={(e) => handleAdminDelete(e, activeMenu.wallpaper)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/60 transition border-t border-white/15 mt-0.5 pt-1.5"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-red-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] hover:bg-red-950/50 transition border-t border-white/15 mt-0.5 pt-1.5"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
@@ -1076,8 +1085,8 @@ export default function FusionWallpapersApp() {
         </GlassContainer>
       )}
 
-      {/* ================= HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-[#070707]/90 px-4 pt-3 pb-2 border-b border-white/10">
+      {/* ================= LIQUID GLASS STICKY HEADER ================= */}
+      <header className="sticky top-0 z-30 bg-[#070707]/75 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
@@ -1086,46 +1095,49 @@ export default function FusionWallpapersApp() {
               setSearchQuery("");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="flex items-center gap-2 text-left focus:outline-none group active:scale-95 transition-transform"
+            className="flex items-center gap-2.5 text-left focus:outline-none group active:scale-95 transition-transform"
           >
-            <div className="h-7 w-7 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
+            <div className="h-8 w-8 rounded-xl overflow-hidden shrink-0 border border-white/25 shadow-md bg-white/5">
               <img
                 src="/logo.webp"
                 alt="Fusion Logo"
                 className="h-full w-full object-cover"
               />
             </div>
-            <span className="text-base sm:text-lg font-black tracking-[0.2em] text-white uppercase">
+            <span className="text-base sm:text-lg font-black tracking-[0.22em] text-white uppercase">
               FUSION
             </span>
           </button>
 
           <div className="flex items-center gap-2">
             {isAdmin && (
-              <button
-                type="button"
+              <GlassButton
+                typeShape="pill"
+                activeWhite={true}
                 onClick={() => setIsUploadModalOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white text-black text-xs font-bold hover:bg-white/90 active:scale-95 transition-transform"
+                className="px-3.5 py-1.5 text-xs font-bold"
               >
-                <Upload className="h-3 w-3" />
+                <Upload className="h-3.5 w-3.5" />
                 <span>Upload</span>
-              </button>
+              </GlassButton>
             )}
 
             {user ? (
-              <button
-                type="button"
+              <GlassButton
+                typeShape="pill"
+                tintOpacity={0.22}
                 onClick={() => setActiveTab("profile")}
-                className="flex items-center gap-1 px-3 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold hover:border-white/40 active:scale-95 transition-transform"
+                className="px-3.5 py-1.5 text-xs font-semibold"
               >
-                <UserIcon className="h-3 w-3 text-white" />
-                <span className="max-w-[80px] truncate">
+                <UserIcon className="h-3.5 w-3.5 text-white" />
+                <span className="max-w-[85px] truncate">
                   {profile?.display_name || "Shadow"}
                 </span>
-              </button>
+              </GlassButton>
             ) : (
-              <button
-                type="button"
+              <GlassButton
+                typeShape="pill"
+                tintOpacity={0.22}
                 onClick={() =>
                   requireAuthForAction(
                     "Sign in to save wallpapers and unlock full-resolution downloads.",
@@ -1133,61 +1145,67 @@ export default function FusionWallpapersApp() {
                     "SIGN_IN"
                   )
                 }
-                className="flex items-center gap-1 px-3.5 py-1 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold hover:border-white/40 active:scale-95 transition-transform"
+                className="px-4 py-1.5 text-xs font-semibold"
               >
-                <UserIcon className="h-3 w-3 text-white" />
+                <UserIcon className="h-3.5 w-3.5 text-white" />
                 <span>Sign In</span>
-              </button>
+              </GlassButton>
             )}
           </div>
         </div>
       </header>
 
-      {/* ================= SEARCH BAR ================= */}
+      {/* ================= LIQUID GLASS SEARCH BAR & PILLS ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
-        <div className="max-w-5xl w-full mx-auto px-4 pt-3 pb-2 z-10 space-y-2">
-          <div className="relative flex items-center w-full h-11 rounded-full bg-white/10 border border-white/20 px-4 focus-within:border-white/50 transition-all">
-            <Search className="h-4 w-4 text-white/60 mr-3 shrink-0" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search wallpapers, anime, moods..."
-              className="w-full bg-transparent text-xs sm:text-sm text-white placeholder:text-white/40 focus:outline-none font-medium"
-            />
-            {searchQuery ? (
-              <button
-                type="button"
-                aria-label="Clear search"
-                onClick={() => setSearchQuery("")}
-                className="text-white/70 hover:text-white p-1"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            ) : null}
-          </div>
+        <div className="max-w-5xl w-full mx-auto px-4 pt-3 pb-2 z-10 space-y-2.5">
+          <GlassContainer
+            type="pill"
+            tintOpacity={0.18}
+            blurRadius={22}
+            className="w-full h-11 px-4 flex items-center"
+          >
+            <div className="flex items-center w-full h-full">
+              <Search className="h-4 w-4 text-white/60 mr-3 shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search wallpapers, anime, moods..."
+                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder:text-white/45 focus:outline-none font-medium"
+              />
+              {searchQuery ? (
+                <button
+                  type="button"
+                  aria-label="Clear search"
+                  onClick={() => setSearchQuery("")}
+                  className="text-white/70 hover:text-white p-1"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              ) : null}
+            </div>
+          </GlassContainer>
 
           {activeTab === "home" && !searchQuery && (
-            <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-1 pb-1">
+            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 pb-1">
               {["All", ...animeCategories.map((c) => c.name)].map(
                 (pillName) => {
                   const isActive = selectedPillCategory === pillName;
                   return (
-                    <button
+                    <GlassButton
                       key={pillName}
+                      typeShape="pill"
+                      activeWhite={isActive}
+                      tintOpacity={0.18}
                       onClick={() => {
                         setSelectedPillCategory(pillName);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className={`px-3.5 py-1.5 rounded-full text-[11px] font-semibold shrink-0 transition-all active:scale-95 ${
-                        isActive
-                          ? "bg-white text-black shadow-sm"
-                          : "bg-white/10 text-white/80 border border-white/15 hover:border-white/30"
-                      }`}
+                      className="px-4 py-1.5 text-[11px] font-semibold shrink-0"
                     >
                       {pillName}
-                    </button>
+                    </GlassButton>
                   );
                 }
               )}
@@ -1196,18 +1214,21 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= CONTENT AREA ================= */}
+      {/* ================= MAIN CONTENT AREA ================= */}
       {activeTab === "profile" ? (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-2 pb-12 z-10">
           {user ? (
             <div className="space-y-6">
-              <div className="rounded-3xl bg-white/5 border border-white/15 p-5 sm:p-6 shadow-sm">
+              <GlassContainer
+                type="rounded"
+                borderRadius={28}
+                tintOpacity={0.2}
+                className="p-5 sm:p-6"
+              >
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-center gap-4">
-                    <div className="h-14 w-14 rounded-full bg-gradient-to-br from-white/30 to-white/10 p-[2px] shrink-0">
-                      <div className="h-full w-full rounded-full bg-black flex items-center justify-center text-lg font-bold text-white uppercase">
-                        {(profile?.display_name || user.email || "U")[0]}
-                      </div>
+                    <div className="h-14 w-14 rounded-full bg-white/15 border border-white/25 flex items-center justify-center text-lg font-bold text-white uppercase shrink-0">
+                      {(profile?.display_name || user.email || "U")[0]}
                     </div>
 
                     <div className="space-y-0.5 min-w-0">
@@ -1244,8 +1265,8 @@ export default function FusionWallpapersApp() {
                   </div>
 
                   <div className="flex items-center gap-2.5">
-                    <Button
-                      type="button"
+                    <GlassButton
+                      typeShape="pill"
                       onClick={() => {
                         setSettingsFeedback(null);
                         setEditDisplayName(
@@ -1255,22 +1276,22 @@ export default function FusionWallpapersApp() {
                         );
                         setIsSettingsModalOpen(true);
                       }}
-                      className="rounded-full bg-white/10 hover:bg-white/20 text-white border border-white/20 text-xs h-9 px-4 active:scale-95 transition-transform"
+                      className="h-9 px-4 text-xs font-semibold"
                     >
-                      <Settings className="h-3.5 w-3.5 mr-1.5 text-white" />{" "}
-                      Settings
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
+                      <Settings className="h-3.5 w-3.5" />
+                      <span>Settings</span>
+                    </GlassButton>
+                    <GlassButton
+                      typeShape="pill"
                       onClick={handleSignOut}
-                      className="rounded-full bg-transparent hover:bg-red-950/40 text-red-300 border border-red-500/30 text-xs h-9 px-4 active:scale-95 transition-transform"
+                      className="h-9 px-4 text-xs font-semibold text-red-200"
                     >
-                      <LogOut className="h-3.5 w-3.5 mr-1.5" /> Sign Out
-                    </Button>
+                      <LogOut className="h-3.5 w-3.5" />
+                      <span>Sign Out</span>
+                    </GlassButton>
                   </div>
                 </div>
-              </div>
+              </GlassContainer>
 
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
@@ -1282,7 +1303,11 @@ export default function FusionWallpapersApp() {
                   </span>
                 </div>
                 {savedWallpapersList.length === 0 ? (
-                  <div className="rounded-3xl bg-white/5 border border-white/10 p-10 text-center max-w-md mx-auto my-4">
+                  <GlassContainer
+                    type="rounded"
+                    borderRadius={28}
+                    className="p-10 text-center max-w-md mx-auto my-4"
+                  >
                     <Bookmark className="h-8 w-8 text-white mx-auto mb-2 opacity-70" />
                     <p className="text-sm font-semibold text-white">
                       You haven&apos;t saved any wallpapers yet.
@@ -1290,14 +1315,15 @@ export default function FusionWallpapersApp() {
                     <p className="text-xs text-white/60 mt-1 mb-4">
                       Tap the 3-dot menu on any wallpaper to save it.
                     </p>
-                    <Button
-                      type="button"
+                    <GlassButton
+                      typeShape="pill"
+                      activeWhite={true}
                       onClick={() => setActiveTab("explore")}
-                      className="rounded-full bg-white text-black font-bold px-6 h-10 text-xs active:scale-95 transition-transform"
+                      className="px-6 h-10 text-xs font-bold"
                     >
                       Explore Wallpapers
-                    </Button>
-                  </div>
+                    </GlassButton>
+                  </GlassContainer>
                 ) : (
                   <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
                     {savedWallpapersList.map((item) =>
@@ -1308,9 +1334,17 @@ export default function FusionWallpapersApp() {
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl bg-white/5 border border-white/15 p-8 text-center max-w-md mx-auto my-10 shadow-sm">
-              <div className="mx-auto h-12 w-12 rounded-full bg-white/10 border border-white/20 flex items-center justify-center mb-4 text-white font-bold text-xl">
-                F
+            <GlassContainer
+              type="rounded"
+              borderRadius={28}
+              className="p-8 text-center max-w-md mx-auto my-10"
+            >
+              <div className="mx-auto h-12 w-12 rounded-2xl overflow-hidden border border-white/25 mb-4">
+                <img
+                  src="/logo.webp"
+                  alt="Fusion Logo"
+                  className="h-full w-full object-cover"
+                />
               </div>
               <h2 className="text-lg font-bold text-white">
                 Your Fusion Account
@@ -1320,8 +1354,9 @@ export default function FusionWallpapersApp() {
                 wallpapers and sync your collection.
               </p>
               <div className="flex gap-3 mt-6">
-                <Button
-                  type="button"
+                <GlassButton
+                  typeShape="pill"
+                  activeWhite={true}
                   onClick={() =>
                     requireAuthForAction(
                       "Sign in to access your saved wallpapers.",
@@ -1329,13 +1364,12 @@ export default function FusionWallpapersApp() {
                       "SIGN_IN"
                     )
                   }
-                  className="flex-1 rounded-full bg-white text-black font-bold h-10 text-xs active:scale-95 transition-transform"
+                  className="flex-1 h-10 text-xs font-bold"
                 >
                   Sign In
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
+                </GlassButton>
+                <GlassButton
+                  typeShape="pill"
                   onClick={() =>
                     requireAuthForAction(
                       "Create an account to unlock downloads.",
@@ -1343,12 +1377,12 @@ export default function FusionWallpapersApp() {
                       "SIGN_UP"
                     )
                   }
-                  className="flex-1 rounded-full bg-white/10 text-white border-white/20 hover:bg-white/20 font-bold h-10 text-xs active:scale-95 transition-transform"
+                  className="flex-1 h-10 text-xs font-bold"
                 >
                   Create Account
-                </Button>
+                </GlassButton>
               </div>
-            </div>
+            </GlassContainer>
           )}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
@@ -1382,19 +1416,19 @@ export default function FusionWallpapersApp() {
                         setExploreView("category");
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="group relative h-28 sm:h-36 rounded-2xl overflow-hidden bg-white/5 border border-white/15 cursor-pointer shadow-sm hover:border-white/40 transition-all flex flex-col justify-end active:scale-95 transition-transform"
+                      className="group relative h-28 sm:h-36 rounded-2xl overflow-hidden bg-white/5 border border-white/15 cursor-pointer shadow-md hover:border-white/40 transition-all flex flex-col justify-end active:scale-95"
                     >
                       <img
                         src={bannerUrl}
                         alt={cat.name}
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/25 to-transparent" />
                       <div className="relative p-2.5">
                         <h3 className="text-xs font-bold text-white tracking-wide truncate">
                           {cat.name}
                         </h3>
-                        <p className="text-[9px] text-white/60 mt-0.5">
+                        <p className="text-[9px] text-white/65 mt-0.5">
                           {catWallpapers.length} wallpapers
                         </p>
                       </div>
@@ -1405,13 +1439,14 @@ export default function FusionWallpapersApp() {
             </div>
           ) : (
             <div className="space-y-3 pt-2">
-              <button
-                type="button"
+              <GlassButton
+                typeShape="pill"
                 onClick={() => setExploreView("grid")}
-                className="flex items-center gap-1.5 text-xs font-semibold text-white/70 hover:text-white transition active:scale-95"
+                className="px-3.5 py-1.5 text-xs font-semibold"
               >
-                <ArrowLeft className="h-3.5 w-3.5" /> Back to Explore
-              </button>
+                <ArrowLeft className="h-3.5 w-3.5" />
+                <span>Back to Explore</span>
+              </GlassButton>
 
               <h2 className="text-lg font-bold text-white tracking-wide">
                 {animeCategories.find((c) => c.id === selectedExploreCategory)
@@ -1419,7 +1454,11 @@ export default function FusionWallpapersApp() {
               </h2>
 
               {filteredWallpapers.length === 0 ? (
-                <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center max-w-md mx-auto my-6">
+                <GlassContainer
+                  type="rounded"
+                  borderRadius={28}
+                  className="p-10 text-center max-w-md mx-auto my-6"
+                >
                   <ImageIcon className="h-8 w-8 text-white mx-auto mb-2 opacity-70" />
                   <h3 className="text-sm font-semibold text-white">
                     No Wallpapers Yet
@@ -1427,7 +1466,7 @@ export default function FusionWallpapersApp() {
                   <p className="text-xs text-white/60 mt-1">
                     Admin hasn&apos;t uploaded any wallpapers for this category.
                   </p>
-                </div>
+                </GlassContainer>
               ) : (
                 <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
                   {filteredWallpapers.map((item) => renderWallpaperCard(item))}
@@ -1457,23 +1496,30 @@ export default function FusionWallpapersApp() {
               ))}
             </div>
           ) : fetchError ? (
-            <div className="rounded-3xl bg-white/5 border border-red-500/30 p-6 text-center max-w-md mx-auto my-6">
+            <GlassContainer
+              type="rounded"
+              borderRadius={24}
+              className="p-6 text-center max-w-md mx-auto my-6"
+            >
               <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-white">Connection Error</h3>
               <p className="text-xs text-white/60 mt-1 mb-3">{fetchError}</p>
-              <Button
-                type="button"
+              <GlassButton
+                typeShape="pill"
+                activeWhite={true}
                 onClick={fetchWallpapers}
-                className="rounded-full bg-white text-black font-bold px-5 h-9 text-xs active:scale-95 transition-transform"
+                className="px-5 h-9 text-xs font-bold"
               >
-                <RefreshCw className="h-3.5 w-3.5 mr-1.5" /> Retry
-              </Button>
-            </div>
+                <RefreshCw className="h-3.5 w-3.5" />
+                <span>Retry</span>
+              </GlassButton>
+            </GlassContainer>
           ) : filteredWallpapers.length === 0 ? (
-            <div className="bg-white/5 border border-white/10 rounded-3xl p-10 text-center max-w-md mx-auto my-6">
-              <div className="mx-auto h-10 w-10 rounded-full bg-white/10 flex items-center justify-center mb-2 text-white font-bold text-sm">
-                F
-              </div>
+            <GlassContainer
+              type="rounded"
+              borderRadius={28}
+              className="p-10 text-center max-w-md mx-auto my-6"
+            >
               <h3 className="text-sm font-semibold text-white">
                 {activeTab === "saved"
                   ? "You haven't saved any wallpapers yet."
@@ -1484,7 +1530,7 @@ export default function FusionWallpapersApp() {
                   ? "Tap the 3-dot menu on any wallpaper to save it."
                   : "Try clearing your search or filter."}
               </p>
-            </div>
+            </GlassContainer>
           ) : (
             <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
               {filteredWallpapers.map((item) => renderWallpaperCard(item))}
@@ -1493,110 +1539,125 @@ export default function FusionWallpapersApp() {
         </main>
       )}
 
-      {/* ================= BOTTOM NAVIGATION ================= */}
+      {/* ================= LIQUID GLASS BOTTOM NAVIGATION DOCK ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
-        className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs rounded-full bg-black/80 backdrop-blur-2xl border border-white/20 p-1.5 shadow-2xl"
+        className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
-        <div className="flex items-center justify-between relative">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("home");
-              setSearchQuery("");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
-              activeTab === "home"
-                ? "bg-white text-black shadow-md"
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            <Home className="h-4 w-4" />
-            <span className="text-[9px] font-bold tracking-wide">Home</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("explore");
-              setExploreView("grid");
-              setSearchQuery("");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
-              activeTab === "explore"
-                ? "bg-white text-black shadow-md"
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            <Compass className="h-4 w-4" />
-            <span className="text-[9px] font-bold tracking-wide">Explore</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              if (!user)
-                requireAuthForAction(
-                  "Sign in to view and sync your saved wallpapers across devices.",
-                  { type: "saved_tab" }
-                );
-              else {
-                setActiveTab("saved");
+        <GlassContainer
+          type="pill"
+          tintOpacity={0.14}
+          blurRadius={26}
+          warp={true}
+          className="p-1.5"
+        >
+          <div className="flex items-center justify-between relative">
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("home");
+                setSearchQuery("");
                 window.scrollTo({ top: 0, behavior: "smooth" });
-              }
-            }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
-              activeTab === "saved"
-                ? "bg-white text-black shadow-md"
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            <Bookmark
-              className={`h-4 w-4 ${activeTab === "saved" ? "fill-black" : ""}`}
-            />
-            <span className="text-[9px] font-bold tracking-wide">Saved</span>
-          </button>
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+                activeTab === "home"
+                  ? "glass-active-white font-bold"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              <Home className="h-4 w-4" />
+              <span className="text-[9px] font-bold tracking-wide">Home</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("profile");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
-              activeTab === "profile"
-                ? "bg-white text-black shadow-md"
-                : "text-white/60 hover:text-white"
-            }`}
-          >
-            <UserIcon className="h-4 w-4" />
-            <span className="text-[9px] font-bold tracking-wide">Profile</span>
-          </button>
-        </div>
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("explore");
+                setExploreView("grid");
+                setSearchQuery("");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+                activeTab === "explore"
+                  ? "glass-active-white font-bold"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              <Compass className="h-4 w-4" />
+              <span className="text-[9px] font-bold tracking-wide">
+                Explore
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                if (!user)
+                  requireAuthForAction(
+                    "Sign in to view and sync your saved wallpapers across devices.",
+                    { type: "saved_tab" }
+                  );
+                else {
+                  setActiveTab("saved");
+                  window.scrollTo({ top: 0, behavior: "smooth" });
+                }
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+                activeTab === "saved"
+                  ? "glass-active-white font-bold"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              <Bookmark
+                className={`h-4 w-4 ${
+                  activeTab === "saved" ? "fill-black" : ""
+                }`}
+              />
+              <span className="text-[9px] font-bold tracking-wide">Saved</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab("profile");
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }}
+              className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+                activeTab === "profile"
+                  ? "glass-active-white font-bold"
+                  : "text-white/65 hover:text-white"
+              }`}
+            >
+              <UserIcon className="h-4 w-4" />
+              <span className="text-[9px] font-bold tracking-wide">
+                Profile
+              </span>
+            </button>
+          </div>
+        </GlassContainer>
       </nav>
 
-      {/* ================= WALLPAPER DETAIL SCREEN ================= */}
+      {/* ================= LIQUID GLASS WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
           role="dialog"
           aria-modal="true"
           aria-label={selectedWallpaper.title}
-          className="fixed inset-0 z-50 bg-black/95 backdrop-blur-3xl overflow-y-auto animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-black/92 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-150"
         >
-          <div className="max-w-3xl mx-auto px-4 pt-3 pb-16 flex flex-col items-center">
-            {/* TOP HEADER */}
+          <div className="max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
+            {/* TOP HEADER: BACK CIRCLE BUTTON, TITLE + CATEGORY, SHARE CIRCLE BUTTON */}
             <div className="w-full flex items-center justify-between mb-2.5">
-              <button
-                type="button"
+              <GlassButton
+                typeShape="circle"
+                size={40}
+                tintOpacity={0.22}
                 aria-label="Go back"
                 onClick={closeWallpaperDetail}
-                className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
               >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
+                <ChevronLeft className="h-5 w-5 text-white" />
+              </GlassButton>
 
               <div className="text-center px-2">
                 <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
@@ -1611,20 +1672,21 @@ export default function FusionWallpapersApp() {
                 </p>
               </div>
 
-              <button
-                type="button"
+              <GlassButton
+                typeShape="circle"
+                size={40}
+                tintOpacity={0.22}
                 aria-label="Share wallpaper"
                 onClick={(e) => handleShareWallpaper(e, selectedWallpaper)}
-                className="h-10 w-10 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-white active:scale-90 transition-transform shadow-lg"
               >
-                <Share2 className="h-4 w-4" />
-              </button>
+                <Share2 className="h-4 w-4 text-white" />
+              </GlassButton>
             </div>
 
             {isAdmin && (
               <div className="mb-2 w-full flex justify-end">
-                <button
-                  type="button"
+                <GlassButton
+                  typeShape="pill"
                   onClick={() => {
                     setEditCategorySelection(
                       selectedWallpaper.category || "none"
@@ -1632,114 +1694,108 @@ export default function FusionWallpapersApp() {
                     setEditSetAsBanner(!!selectedWallpaper.is_banner);
                     setIsEditModalOpen(true);
                   }}
-                  className="h-8 px-3 rounded-full bg-white/10 border border-white/20 flex items-center gap-1.5 text-white text-[11px] font-bold active:scale-95 transition-transform"
+                  className="h-8 px-3.5 text-[11px] font-bold"
                 >
-                  <Edit3 className="h-3 w-3" /> Edit Category
-                </button>
+                  <Edit3 className="h-3 w-3" />
+                  <span>Edit Category</span>
+                </GlassButton>
               </div>
             )}
 
-            {/* WALLPAPER BOX */}
+            {/* PERFECT WALLPAPER BOX (EXACT IMAGE SIZE, ICON-ONLY EXPAND BUTTON IN TOP-LEFT CORNER) */}
             <div
-              className="relative rounded-3xl overflow-hidden bg-white/5 border border-white/15 shadow-2xl flex items-center justify-center mx-auto w-fit max-w-full mb-3"
+              className="relative inline-block rounded-3xl overflow-hidden bg-white/5 border border-white/20 shadow-2xl mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <div
-                className={`w-full flex items-center justify-center transition-all duration-300 ${
-                  isExpanded ? "max-h-[80vh] overflow-x-auto" : "max-h-[60vh]"
+              <img
+                src={selectedWallpaper.image_url}
+                alt={selectedWallpaper.title}
+                draggable={false}
+                onContextMenu={(e) => e.preventDefault()}
+                className={`block pointer-events-none select-none transition-all duration-300 ${
+                  detailIsTall && !isExpanded
+                    ? "w-auto max-w-full max-h-[62vh] aspect-[9/16] object-cover"
+                    : "w-auto max-w-full h-auto max-h-[75vh] object-contain"
                 }`}
-              >
-                <img
-                  src={selectedWallpaper.image_url}
-                  alt={selectedWallpaper.title}
-                  draggable={false}
-                  onContextMenu={(e) => e.preventDefault()}
-                  className={`block pointer-events-none select-none transition-all duration-300 ${
-                    detailIsTall && !isExpanded
-                      ? "w-full aspect-[9/16] object-cover sm:w-auto sm:h-[58vh]"
-                      : "w-full h-auto object-contain max-h-[62vh]"
-                  }`}
-                />
-              </div>
+              />
 
               <div
                 className="absolute inset-0 z-10 bg-transparent"
                 onContextMenu={(e) => e.preventDefault()}
               />
 
-              {detailIsTall && !isExpanded && (
-                <button
-                  type="button"
-                  aria-label="Toggle full screen preview"
-                  onClick={() => setIsExpanded(true)}
-                  className="absolute bottom-3 bg-black/70 backdrop-blur-xl px-4 py-2 rounded-full border border-white/25 flex items-center justify-center text-white text-xs font-bold gap-2 z-20 active:scale-95 transition-transform"
+              {/* TOP-LEFT CORNER ICON-ONLY FULL SCREEN BUTTON */}
+              {detailIsTall && (
+                <GlassButton
+                  typeShape="circle"
+                  size={38}
+                  tintOpacity={0.2}
+                  blurRadius={24}
+                  aria-label={
+                    isExpanded
+                      ? "Minimize wallpaper preview"
+                      : "View full wallpaper"
+                  }
+                  onClick={() => setIsExpanded(!isExpanded)}
+                  className="absolute top-3 left-3 z-20"
                 >
-                  <Maximize2 className="h-3 w-3 text-white" />
-                  View Full Wallpaper
-                </button>
-              )}
-
-              {detailIsTall && isExpanded && (
-                <button
-                  type="button"
-                  aria-label="Minimize preview"
-                  onClick={() => setIsExpanded(false)}
-                  className="absolute bottom-3 right-3 h-8 w-8 bg-black/70 backdrop-blur-xl rounded-full border border-white/25 flex items-center justify-center text-white z-20 active:scale-90 transition-transform"
-                >
-                  <Minimize2 className="h-3 w-3 text-white" />
-                </button>
+                  {isExpanded ? (
+                    <Minimize2 className="h-4 w-4 text-white" />
+                  ) : (
+                    <Maximize2 className="h-4 w-4 text-white" />
+                  )}
+                </GlassButton>
               )}
             </div>
 
-            {/* SIDE-BY-SIDE SAVE AND DOWNLOAD BUTTONS */}
+            {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS */}
             <div className="flex items-center gap-3 w-full max-w-md mb-5">
-              <Button
-                type="button"
-                variant="outline"
+              <GlassButton
+                typeShape="pill"
+                tintOpacity={0.22}
+                activeWhite={savedIds.includes(selectedWallpaper.id)}
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`flex-1 h-12 rounded-full font-bold text-xs border transition backdrop-blur-2xl shadow-lg active:scale-95 transition-transform ${
-                  savedIds.includes(selectedWallpaper.id)
-                    ? "bg-white text-black border-white hover:bg-white/90"
-                    : "bg-white/10 border-white/20 text-white hover:bg-white/20"
-                }`}
+                className="flex-1 h-12 text-xs font-bold"
               >
                 <Bookmark
-                  className={`h-4 w-4 mr-1.5 ${
+                  className={`h-4 w-4 ${
                     savedIds.includes(selectedWallpaper.id)
                       ? "fill-black text-black"
                       : ""
                   }`}
                 />
-                {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
-              </Button>
+                <span>
+                  {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
+                </span>
+              </GlassButton>
 
-              <Button
-                type="button"
+              <GlassButton
+                typeShape="pill"
+                activeWhite={true}
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-12 rounded-full bg-white text-black font-extrabold text-xs shadow-lg hover:bg-white/90 active:scale-95 transition-transform"
+                className="flex-1 h-12 text-xs font-extrabold"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin mr-1.5" />{" "}
-                    Downloading...
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <span>Downloading...</span>
                   </>
                 ) : (
                   <>
-                    <Download className="h-4 w-4 mr-1.5" /> Download
+                    <Download className="h-4 w-4" />
+                    <span>Download</span>
                   </>
                 )}
-              </Button>
+              </GlassButton>
             </div>
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
-              <div
-                className={`mb-4 w-full max-w-md p-3 rounded-2xl border text-xs flex items-center justify-between backdrop-blur-xl ${
-                  downloadStatus.type === "success"
-                    ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200"
-                    : "bg-red-950/70 border-red-400/40 text-red-200"
-                }`}
+              <GlassContainer
+                type="rounded"
+                borderRadius={16}
+                className="mb-4 w-full max-w-md p-3 text-xs flex items-center justify-between"
               >
                 <div className="flex items-center gap-2">
                   {downloadStatus.type === "success" ? (
@@ -1758,7 +1814,7 @@ export default function FusionWallpapersApp() {
                     Retry
                   </button>
                 )}
-              </div>
+              </GlassContainer>
             )}
 
             {/* RELATED WALLPAPERS SECTION */}
@@ -1779,16 +1835,15 @@ export default function FusionWallpapersApp() {
                   </div>
                   {relatedVisibleCount < relatedWallpapers.length && (
                     <div className="mt-4 text-center">
-                      <Button
-                        type="button"
-                        variant="outline"
+                      <GlassButton
+                        typeShape="pill"
                         onClick={() =>
                           setRelatedVisibleCount((prev) => prev + 6)
                         }
-                        className="rounded-full bg-white/10 border-white/20 text-white hover:bg-white/20 px-4 h-9 active:scale-95 transition-transform text-xs font-semibold"
+                        className="px-5 h-9 text-xs font-semibold"
                       >
                         Load More Related
-                      </Button>
+                      </GlassButton>
                     </div>
                   )}
                 </>
