@@ -202,7 +202,6 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Close 3-dot menu on outside click
   useEffect(() => {
     const handleClickOutside = () => setMenuOpenWallpaperId(null);
     window.addEventListener("click", handleClickOutside);
@@ -670,7 +669,7 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
-  // --- PINTEREST UI CARD (3-DOT MENU, NO CORNER BUTTONS, TITLE BELOW) ---
+  // --- PINTEREST UI CARD (TIGHT GAP, NAME BELOW, SQUARED 3-DOT MENU) ---
   const renderWallpaperCard = (item: Wallpaper, options?: { showRemoveSavedBtn?: boolean }) => {
     const isSaved = savedIds.includes(item.id);
     const ratio = imageRatios[item.id];
@@ -680,12 +679,12 @@ export default function FusionWallpapersApp() {
     return (
       <div
         key={item.id}
-        className="break-inside-avoid mb-4 group relative flex flex-col"
+        className="break-inside-avoid mb-3 relative flex flex-col"
       >
         {/* Wallpaper Image Container */}
         <div
           onClick={() => openWallpaperDetail(item)}
-          className={`relative w-full overflow-hidden rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 shadow-[0_10px_30px_rgba(0,0,0,0.6)] cursor-pointer transition-all duration-300 hover:border-white/30 hover:shadow-[0_0_25px_rgba(255,255,255,0.15)] active:scale-95 transition-transform ${isTall ? "aspect-[9/16]" : ""}`}
+          className={`relative w-full overflow-hidden rounded-2xl bg-white/5 border border-white/10 shadow-sm cursor-pointer transition-all duration-200 hover:opacity-95 active:scale-95 ${isTall ? "aspect-[9/16]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
@@ -698,14 +697,14 @@ export default function FusionWallpapersApp() {
               setImageRatios((prev) => ({ ...prev, [item.id]: naturalWidth / naturalHeight }));
             }}
             onContextMenu={(e) => e.preventDefault()}
-            className={`w-full block pointer-events-none select-none transition-transform duration-500 group-hover:scale-105 ${isTall ? "h-full object-cover" : "h-auto object-cover"}`}
+            className={`w-full block pointer-events-none select-none ${isTall ? "h-full object-cover" : "h-auto object-cover"}`}
           />
           <div className="absolute inset-0 z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
         </div>
 
-        {/* Title Below Wallpaper + 3-Dot Menu Button (Pinterest Style) */}
-        <div className="mt-2.5 px-1 flex items-center justify-between relative">
-          <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate max-w-[80%]">
+        {/* Title Below Wallpaper + 3-Dot Menu Button (Sqaured Minimalist) */}
+        <div className="mt-1.5 px-0.5 flex items-center justify-between relative">
+          <h3 className="text-xs font-normal text-white/90 truncate max-w-[80%] tracking-tight">
             {item.title}
           </h3>
 
@@ -717,15 +716,15 @@ export default function FusionWallpapersApp() {
                 e.stopPropagation();
                 setMenuOpenWallpaperId(isMenuOpen ? null : item.id);
               }}
-              className="h-8 w-8 rounded-full bg-white/10 hover:bg-white/20 backdrop-blur-xl border border-white/15 flex items-center justify-center text-white transition active:scale-90"
+              className="h-6 w-6 rounded-md hover:bg-white/10 flex items-center justify-center text-white/80 transition active:scale-90"
             >
-              <MoreHorizontal className="h-4 w-4" />
+              <MoreHorizontal className="h-3.5 w-3.5" />
             </button>
 
-            {/* LIQUID GLASS 3-DOT POPUP MENU */}
+            {/* MINIMALIST POPUP MENU */}
             {isMenuOpen && (
               <div 
-                className="absolute right-0 bottom-10 z-40 w-44 rounded-2xl bg-[#121212]/90 backdrop-blur-2xl border border-white/20 p-1.5 shadow-[0_10px_30px_rgba(0,0,0,0.8)] animate-in fade-in zoom-in-95 duration-150"
+                className="absolute right-0 bottom-8 z-40 w-40 rounded-xl bg-[#141414] border border-white/15 p-1 shadow-2xl animate-in fade-in duration-100"
                 onClick={(e) => e.stopPropagation()}
               >
                 <button
@@ -735,18 +734,18 @@ export default function FusionWallpapersApp() {
                     setMenuOpenWallpaperId(null);
                     toggleSaveWallpaper(null, item);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white hover:bg-white/10 transition"
                 >
-                  <Bookmark className={`h-4 w-4 ${isSaved ? "fill-white text-white" : ""}`} />
+                  <Bookmark className={`h-3.5 w-3.5 ${isSaved ? "fill-white text-white" : ""}`} />
                   <span>{isSaved ? "Saved" : "Save"}</span>
                 </button>
 
                 <button
                   type="button"
                   onClick={(e) => handleShareWallpaper(e, item)}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white hover:bg-white/10 transition"
                 >
-                  <Share2 className="h-4 w-4" />
+                  <Share2 className="h-3.5 w-3.5" />
                   <span>Share</span>
                 </button>
 
@@ -757,9 +756,9 @@ export default function FusionWallpapersApp() {
                     setMenuOpenWallpaperId(null);
                     triggerDirectDownload(item);
                   }}
-                  className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-white hover:bg-white/10 transition active:scale-95"
+                  className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-white hover:bg-white/10 transition"
                 >
-                  <Download className="h-4 w-4" />
+                  <Download className="h-3.5 w-3.5" />
                   <span>Download</span>
                 </button>
 
@@ -767,9 +766,9 @@ export default function FusionWallpapersApp() {
                   <button
                     type="button"
                     onClick={(e) => handleAdminDelete(e, item)}
-                    className="w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-xs font-semibold text-red-400 hover:bg-red-950/40 transition active:scale-95 border-t border-white/10 mt-1 pt-1.5"
+                    className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium text-red-400 hover:bg-red-950/40 transition border-t border-white/10 mt-0.5 pt-1"
                   >
-                    <Trash2 className="h-4 w-4" />
+                    <Trash2 className="h-3.5 w-3.5" />
                     <span>Delete</span>
                   </button>
                 )}
@@ -792,7 +791,7 @@ export default function FusionWallpapersApp() {
       <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[600px] h-[250px] bg-white/5 blur-[130px] rounded-full z-0" />
 
       {/* ================= HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-[#070707]/80 backdrop-blur-2xl px-4 pt-4 pb-3 border-b border-white/10">
+      <header className="sticky top-0 z-30 bg-[#070707]/85 backdrop-blur-2xl px-4 pt-3.5 pb-2.5 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
@@ -801,30 +800,31 @@ export default function FusionWallpapersApp() {
               setSearchQuery("");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="flex items-center gap-3 text-left focus:outline-none group active:scale-95 transition-transform"
+            className="flex items-center gap-2.5 text-left focus:outline-none group active:scale-95 transition-transform"
           >
-            <div className="h-10 w-10 rounded-2xl bg-white/10 backdrop-blur-xl border border-white/20 flex items-center justify-center overflow-hidden shadow-[0_0_15px_rgba(255,255,255,0.15)] group-hover:border-white/40 transition">
+            {/* FIXED LOGO CONTAINER (NO WEIRD SPACING) */}
+            <div className="h-8 w-8 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
               <img
                 src="/logo.png"
                 alt="Fusion Logo"
                 onError={(e) => { e.currentTarget.style.display = "none"; }}
                 className="h-full w-full object-cover"
               />
-              <div className="absolute text-white font-black text-base pointer-events-none">F</div>
+              <div className="absolute text-white font-black text-xs pointer-events-none">F</div>
             </div>
-            <span className="text-xl sm:text-2xl font-black tracking-[0.25em] text-white uppercase">
+            <span className="text-lg sm:text-xl font-black tracking-[0.2em] text-white uppercase">
               FUSION
             </span>
           </button>
 
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2">
             {isAdmin && (
               <button
                 type="button"
                 onClick={() => setIsUploadModalOpen(true)}
-                className="flex items-center gap-1.5 px-4 py-2 rounded-full bg-white text-black text-xs font-bold shadow-[0_0_20px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-transform"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white text-black text-xs font-bold hover:bg-white/90 active:scale-95 transition-transform"
               >
-                <Upload className="h-4 w-4" />
+                <Upload className="h-3.5 w-3.5" />
                 <span>Upload</span>
               </button>
             )}
@@ -833,18 +833,18 @@ export default function FusionWallpapersApp() {
               <button
                 type="button"
                 onClick={() => setActiveTab("profile")}
-                className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-white text-xs sm:text-sm font-semibold shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:border-white/40 active:scale-95 transition-transform"
+                className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold hover:border-white/40 active:scale-95 transition-transform"
               >
-                <UserIcon className="h-4 w-4 text-white" />
-                <span className="max-w-[110px] truncate">{profile?.display_name || "Shadow"}</span>
+                <UserIcon className="h-3.5 w-3.5 text-white" />
+                <span className="max-w-[90px] truncate">{profile?.display_name || "Shadow"}</span>
               </button>
             ) : (
               <button
                 type="button"
                 onClick={() => requireAuthForAction("Sign in to save wallpapers and unlock full-resolution downloads.", { type: "profile_tab" }, "SIGN_IN")}
-                className="flex items-center gap-2 px-5 py-2 rounded-full bg-white/10 backdrop-blur-xl border border-white/20 text-white text-xs sm:text-sm font-semibold shadow-[0_0_15px_rgba(255,255,255,0.1)] hover:border-white/40 active:scale-95 transition-transform"
+                className="flex items-center gap-1.5 px-4 py-1.5 rounded-full bg-white/10 border border-white/20 text-white text-xs font-semibold hover:border-white/40 active:scale-95 transition-transform"
               >
-                <UserIcon className="h-4 w-4 text-white" />
+                <UserIcon className="h-3.5 w-3.5 text-white" />
                 <span>Sign In</span>
               </button>
             )}
@@ -854,20 +854,20 @@ export default function FusionWallpapersApp() {
 
       {/* ================= SEARCH BAR ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
-        <div className="max-w-5xl w-full mx-auto px-4 pt-4 pb-2 z-10 space-y-3">
-          <div className="relative flex items-center w-full h-13 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 px-5 shadow-[0_10px_30px_rgba(0,0,0,0.5)] focus-within:border-white/50 focus-within:shadow-[0_0_35px_rgba(255,255,255,0.2)] transition-all">
-            <Search className="h-5 w-5 text-white/60 mr-3.5 shrink-0" />
+        <div className="max-w-5xl w-full mx-auto px-4 pt-3.5 pb-2 z-10 space-y-2.5">
+          <div className="relative flex items-center w-full h-12 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 px-4 shadow-sm focus-within:border-white/50 transition-all">
+            <Search className="h-4 w-4 text-white/60 mr-3 shrink-0" />
             <input
               ref={searchInputRef}
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search wallpapers, anime, moods..."
-              className="w-full bg-transparent text-sm sm:text-base text-white placeholder:text-white/40 focus:outline-none font-medium"
+              className="w-full bg-transparent text-sm text-white placeholder:text-white/40 focus:outline-none font-medium"
             />
             {searchQuery ? (
               <button type="button" aria-label="Clear search" onClick={() => setSearchQuery("")} className="text-white/70 hover:text-white p-1">
-                <X className="h-5 w-5" />
+                <X className="h-4 w-4" />
               </button>
             ) : null}
           </div>
@@ -883,10 +883,10 @@ export default function FusionWallpapersApp() {
                       setSelectedPillCategory(pillName);
                       window.scrollTo({ top: 0, behavior: "smooth" });
                     }}
-                    className={`px-5 py-2 rounded-full text-xs sm:text-sm font-semibold shrink-0 transition-all duration-300 active:scale-95 ${
+                    className={`px-4 py-1.5 rounded-full text-xs font-semibold shrink-0 transition-all active:scale-95 ${
                       isActive
-                        ? "bg-white text-black shadow-[0_0_20px_rgba(255,255,255,0.35)]"
-                        : "bg-white/10 backdrop-blur-xl text-white/80 border border-white/15 hover:border-white/30"
+                        ? "bg-white text-black shadow-sm"
+                        : "bg-white/10 text-white/80 border border-white/15 hover:border-white/30"
                     }`}
                   >
                     {pillName}
@@ -903,10 +903,10 @@ export default function FusionWallpapersApp() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-12 z-10">
           {user ? (
             <div className="space-y-8">
-              <div className="rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/15 p-6 sm:p-8 shadow-[0_15px_50px_rgba(0,0,0,0.7)]">
+              <div className="rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/15 p-6 sm:p-8 shadow-md">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                   <div className="flex items-center gap-5">
-                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-white/30 to-white/10 p-[2px] shadow-[0_0_25px_rgba(255,255,255,0.2)] shrink-0">
+                    <div className="h-16 w-16 rounded-full bg-gradient-to-br from-white/30 to-white/10 p-[2px] shadow-sm shrink-0">
                       <div className="h-full w-full rounded-full bg-black flex items-center justify-center text-xl font-bold text-white uppercase">
                         {(profile?.display_name || user.email || "U")[0]}
                       </div>
@@ -947,29 +947,29 @@ export default function FusionWallpapersApp() {
                   <div className="rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/10 p-12 text-center max-w-md mx-auto my-6">
                     <Bookmark className="h-10 w-10 text-white mx-auto mb-3 opacity-80" />
                     <p className="text-sm sm:text-base font-semibold text-white">You haven&apos;t saved any wallpapers yet.</p>
-                    <p className="text-xs text-white/60 mt-1.5 mb-6">Tap the bookmark icon on any wallpaper to keep your favorites saved.</p>
-                    <Button type="button" onClick={() => setActiveTab("explore")} className="rounded-full bg-white text-black font-bold px-7 h-12 shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95 transition-transform">
+                    <p className="text-xs text-white/60 mt-1.5 mb-6">Tap the 3-dot menu on any wallpaper to save it.</p>
+                    <Button type="button" onClick={() => setActiveTab("explore")} className="rounded-full bg-white text-black font-bold px-7 h-12 active:scale-95 transition-transform">
                       Explore Wallpapers
                     </Button>
                   </div>
                 ) : (
-                  <div className="columns-2 sm:columns-3 md:columns-4 gap-3.5 space-y-3.5">
+                  <div className="columns-2 sm:columns-3 md:columns-4 gap-3 space-y-3">
                     {savedWallpapersList.map((item) => renderWallpaperCard(item, { showRemoveSavedBtn: true }))}
                   </div>
                 )}
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/15 p-8 sm:p-12 text-center max-w-md mx-auto my-12 shadow-[0_15px_50px_rgba(0,0,0,0.7)]">
-              <div className="mx-auto h-16 w-16 rounded-full bg-white/10 border border-white/20 flex items-center justify-center mb-5 text-white font-bold text-2xl shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+            <div className="rounded-3xl bg-white/5 backdrop-blur-2xl border border-white/15 p-8 sm:p-12 text-center max-w-md mx-auto my-12 shadow-md">
+              <div className="mx-auto h-16 w-16 rounded-full bg-white/10 border border-white/20 flex items-center justify-center mb-5 text-white font-bold text-2xl">
                 F
               </div>
               <h2 className="text-xl font-bold text-white">Your Fusion Account</h2>
               <p className="text-xs sm:text-sm text-white/60 mt-2.5 leading-relaxed">
-                Sign in or create a free account to download high-resolution wallpapers and sync your saved collection across devices.
+                Sign in or create a free account to download high-resolution wallpapers and sync your saved collection.
               </p>
               <div className="flex flex-col sm:flex-row gap-3.5 mt-8">
-                <Button type="button" onClick={() => requireAuthForAction("Sign in to access your saved wallpapers and downloads.", { type: "profile_tab" }, "SIGN_IN")} className="flex-1 rounded-full bg-white text-black font-bold h-12 shadow-[0_0_20px_rgba(255,255,255,0.3)] active:scale-95 transition-transform">
+                <Button type="button" onClick={() => requireAuthForAction("Sign in to access your saved wallpapers and downloads.", { type: "profile_tab" }, "SIGN_IN")} className="flex-1 rounded-full bg-white text-black font-bold h-12 active:scale-95 transition-transform">
                   Sign In
                 </Button>
                 <Button type="button" variant="outline" onClick={() => requireAuthForAction("Create an account to unlock downloads and saved wallpapers.", { type: "profile_tab" }, "SIGN_UP")} className="flex-1 rounded-full bg-white/10 text-white border-white/20 hover:bg-white/20 font-bold h-12 active:scale-95 transition-transform">
@@ -982,13 +982,13 @@ export default function FusionWallpapersApp() {
       ) : activeTab === "explore" && !searchQuery ? (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-10">
           {exploreView === "grid" ? (
-            <div className="space-y-5 pt-2">
-              <div className="flex items-center gap-2.5">
+            <div className="space-y-4 pt-2">
+              <div className="flex items-center gap-2">
                 <Compass className="h-5 w-5 text-white" />
                 <h2 className="text-lg font-bold text-white tracking-wide">Explore Anime</h2>
               </div>
               
-              <div className="grid grid-cols-2 gap-3 sm:gap-4">
+              <div className="grid grid-cols-2 gap-3">
                 {animeCategories.map((cat) => {
                   const catWallpapers = wallpapers.filter(w => getWallpaperCategory(w) === cat.id);
                   let banner = catWallpapers.find(w => w.is_banner);
@@ -1003,7 +1003,7 @@ export default function FusionWallpapersApp() {
                         setExploreView("category");
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="group relative h-36 sm:h-48 rounded-3xl overflow-hidden bg-white/5 border border-white/15 cursor-pointer shadow-[0_10px_30px_rgba(0,0,0,0.6)] hover:border-white/40 hover:shadow-[0_0_30px_rgba(255,255,255,0.2)] transition-all duration-300 flex flex-col justify-end active:scale-95 transition-transform"
+                      className="group relative h-32 sm:h-44 rounded-2xl overflow-hidden bg-white/5 border border-white/15 cursor-pointer shadow-sm hover:border-white/40 transition-all duration-300 flex flex-col justify-end active:scale-95 transition-transform"
                     >
                       <img 
                         src={bannerUrl} 
@@ -1011,9 +1011,9 @@ export default function FusionWallpapersApp() {
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none select-none"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
-                      <div className="relative p-3.5 sm:p-4">
-                        <h3 className="text-xs sm:text-base font-bold text-white tracking-wide drop-shadow truncate">{cat.name}</h3>
-                        <p className="text-[10px] sm:text-xs text-white/60 mt-0.5">{catWallpapers.length} {catWallpapers.length === 1 ? 'wallpaper' : 'wallpapers'}</p>
+                      <div className="relative p-3">
+                        <h3 className="text-xs sm:text-sm font-bold text-white tracking-wide truncate">{cat.name}</h3>
+                        <p className="text-[10px] text-white/60 mt-0.5">{catWallpapers.length} {catWallpapers.length === 1 ? 'wallpaper' : 'wallpapers'}</p>
                       </div>
                     </div>
                   );
@@ -1024,7 +1024,7 @@ export default function FusionWallpapersApp() {
             <div className="space-y-4 pt-2">
               <button 
                 onClick={() => setExploreView("grid")}
-                className="flex items-center gap-2 text-xs font-semibold text-white/70 hover:text-white transition active:scale-95"
+                className="flex items-center gap-1.5 text-xs font-semibold text-white/70 hover:text-white transition active:scale-95"
               >
                 <ArrowLeft className="h-4 w-4" /> Back to Explore
               </button>
@@ -1044,7 +1044,7 @@ export default function FusionWallpapersApp() {
                   </p>
                 </div>
               ) : (
-                <div className="columns-2 sm:columns-3 md:columns-4 gap-3.5 space-y-3.5">
+                <div className="columns-2 sm:columns-3 md:columns-4 gap-3 space-y-3">
                   {filteredWallpapers.map((item) => renderWallpaperCard(item))}
                 </div>
               )}
@@ -1054,15 +1054,15 @@ export default function FusionWallpapersApp() {
       ) : (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10">
           {activeTab === "saved" && (
-            <div className="mb-4 flex items-center justify-between">
+            <div className="mb-3.5 flex items-center justify-between">
               <h2 className="text-sm font-bold text-white tracking-wide uppercase">Saved Wallpapers ({filteredWallpapers.length})</h2>
             </div>
           )}
 
           {loading ? (
-            <div className="columns-2 sm:columns-3 md:columns-4 gap-3.5 space-y-3.5">
+            <div className="columns-2 sm:columns-3 md:columns-4 gap-3 space-y-3">
               {[260, 190, 230, 280, 200, 250].map((height, idx) => (
-                <div key={idx} style={{ height: `${height}px` }} className="break-inside-avoid rounded-3xl bg-white/5 backdrop-blur-xl border border-white/10 animate-pulse" />
+                <div key={idx} style={{ height: `${height}px` }} className="break-inside-avoid rounded-2xl bg-white/5 border border-white/10 animate-pulse" />
               ))}
             </div>
           ) : fetchError ? (
@@ -1081,11 +1081,11 @@ export default function FusionWallpapersApp() {
                 {activeTab === "saved" ? "You haven't saved any wallpapers yet." : "No Wallpapers Found"}
               </h3>
               <p className="text-xs text-white/60 mt-1.5 mb-5 leading-relaxed">
-                {activeTab === "saved" ? "Tap the bookmark icon on any wallpaper to save it." : "Try clearing your search or filter."}
+                {activeTab === "saved" ? "Tap the 3-dot menu on any wallpaper to save it." : "Try clearing your search or filter."}
               </p>
             </div>
           ) : (
-            <div className="columns-2 sm:columns-3 md:columns-4 gap-3.5 space-y-3.5">
+            <div className="columns-2 sm:columns-3 md:columns-4 gap-3 space-y-3">
               {filteredWallpapers.map((item) => renderWallpaperCard(item))}
             </div>
           )}
@@ -1095,27 +1095,27 @@ export default function FusionWallpapersApp() {
       {/* ================= FLOATING BOTTOM NAVIGATION ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
-        className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-[90%] max-w-md rounded-full bg-black/60 backdrop-blur-2xl border border-white/20 px-6 py-2.5 shadow-[0_15px_40px_rgba(0,0,0,0.9),0_0_25px_rgba(255,255,255,0.1)]"
+        className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-sm rounded-full bg-black/70 backdrop-blur-2xl border border-white/20 px-5 py-2 shadow-2xl"
       >
         <div className="flex items-center justify-between">
-          <button type="button" onClick={() => { setActiveTab("home"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-1 group px-2 active:scale-90 transition-transform">
-            <Home className={`h-5 w-5 transition ${activeTab === "home" ? "text-white drop-shadow-[0_0_10px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
-            <span className={`text-[10px] font-semibold tracking-wide ${activeTab === "home" ? "text-white" : "text-white/50"}`}>Home</span>
+          <button type="button" onClick={() => { setActiveTab("home"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-2 active:scale-90 transition-transform">
+            <Home className={`h-4 w-4 sm:h-5 sm:w-5 transition ${activeTab === "home" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
+            <span className={`text-[10px] font-semibold ${activeTab === "home" ? "text-white" : "text-white/50"}`}>Home</span>
           </button>
           
-          <button type="button" onClick={() => { setActiveTab("explore"); setExploreView("grid"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-1 group px-2 active:scale-90 transition-transform">
-            <Compass className={`h-5 w-5 transition ${activeTab === "explore" ? "text-white drop-shadow-[0_0_10px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
-            <span className={`text-[10px] font-semibold tracking-wide ${activeTab === "explore" ? "text-white" : "text-white/50"}`}>Explore</span>
+          <button type="button" onClick={() => { setActiveTab("explore"); setExploreView("grid"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-2 active:scale-90 transition-transform">
+            <Compass className={`h-4 w-4 sm:h-5 sm:w-5 transition ${activeTab === "explore" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
+            <span className={`text-[10px] font-semibold ${activeTab === "explore" ? "text-white" : "text-white/50"}`}>Explore</span>
           </button>
           
-          <button type="button" onClick={() => { if (!user) requireAuthForAction("Sign in to view and sync your saved wallpapers across devices.", { type: "saved_tab" }); else { setActiveTab("saved"); window.scrollTo({ top: 0, behavior: "smooth" }); } }} className="flex flex-col items-center gap-1 group px-2 active:scale-90 transition-transform">
-            <Bookmark className={`h-5 w-5 transition ${activeTab === "saved" ? "text-white fill-white drop-shadow-[0_0_10px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
-            <span className={`text-[10px] font-semibold tracking-wide ${activeTab === "saved" ? "text-white" : "text-white/50"}`}>Saved</span>
+          <button type="button" onClick={() => { if (!user) requireAuthForAction("Sign in to view and sync your saved wallpapers across devices.", { type: "saved_tab" }); else { setActiveTab("saved"); window.scrollTo({ top: 0, behavior: "smooth" }); } }} className="flex flex-col items-center gap-0.5 group px-2 active:scale-90 transition-transform">
+            <Bookmark className={`h-4 w-4 sm:h-5 sm:w-5 transition ${activeTab === "saved" ? "text-white fill-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
+            <span className={`text-[10px] font-semibold ${activeTab === "saved" ? "text-white" : "text-white/50"}`}>Saved</span>
           </button>
           
-          <button type="button" onClick={() => { setActiveTab("profile"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-1 group px-2 active:scale-90 transition-transform">
-            <UserIcon className={`h-5 w-5 transition ${activeTab === "profile" ? "text-white drop-shadow-[0_0_10px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
-            <span className={`text-[10px] font-semibold tracking-wide ${activeTab === "profile" ? "text-white" : "text-white/50"}`}>Profile</span>
+          <button type="button" onClick={() => { setActiveTab("profile"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-2 active:scale-90 transition-transform">
+            <UserIcon className={`h-4 w-4 sm:h-5 sm:w-5 transition ${activeTab === "profile" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/50 group-hover:text-white"}`} />
+            <span className={`text-[10px] font-semibold ${activeTab === "profile" ? "text-white" : "text-white/50"}`}>Profile</span>
           </button>
         </div>
       </nav>
@@ -1139,7 +1139,7 @@ export default function FusionWallpapersApp() {
                     setEditSetAsBanner(!!selectedWallpaper.is_banner);
                     setIsEditModalOpen(true);
                   }}
-                  className="h-11 px-5 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 flex items-center gap-2 text-white shadow-xl hover:bg-white/20 text-xs font-bold active:scale-95 transition-transform"
+                  className="h-10 px-4 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 flex items-center gap-2 text-white shadow-lg hover:bg-white/20 text-xs font-bold active:scale-95 transition-transform"
                 >
                   <Edit3 className="h-4 w-4 text-white" /> Edit Category
                 </button>
@@ -1149,14 +1149,14 @@ export default function FusionWallpapersApp() {
                 type="button"
                 aria-label="Close detail view"
                 onClick={closeWallpaperDetail}
-                className="h-11 w-11 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 flex items-center justify-center text-white shadow-xl hover:bg-white/20 active:scale-90 transition-transform"
+                className="h-10 w-10 rounded-full bg-white/10 backdrop-blur-2xl border border-white/20 flex items-center justify-center text-white shadow-lg hover:bg-white/20 active:scale-90 transition-transform"
               >
                 <X className="h-5 w-5" />
               </button>
             </div>
 
             <div
-              className="relative rounded-3xl overflow-hidden bg-white/5 backdrop-blur-xl border border-white/15 shadow-[0_20px_60px_rgba(0,0,0,0.9)] flex items-center justify-center mx-auto w-fit max-w-full"
+              className="relative rounded-3xl overflow-hidden bg-white/5 backdrop-blur-xl border border-white/15 shadow-2xl flex items-center justify-center mx-auto w-fit max-w-full"
               onContextMenu={(e) => e.preventDefault()}
             >
               <div className={`w-full flex items-center justify-center transition-all duration-300 ${isExpanded ? "max-h-[85vh] overflow-x-auto" : "max-h-[72vh]"}`}>
@@ -1176,7 +1176,7 @@ export default function FusionWallpapersApp() {
                   type="button"
                   aria-label="Toggle full screen preview"
                   onClick={() => setIsExpanded(true)}
-                  className="absolute bottom-5 bg-black/70 backdrop-blur-xl px-6 py-3 rounded-full border border-white/25 flex items-center justify-center text-white hover:bg-black/90 transition shadow-2xl active:scale-95 text-sm font-bold gap-2.5 z-20"
+                  className="absolute bottom-5 bg-black/70 backdrop-blur-xl px-5 py-2.5 rounded-full border border-white/25 flex items-center justify-center text-white hover:bg-black/90 transition shadow-2xl active:scale-95 text-xs font-bold gap-2 z-20"
                 >
                   <Maximize2 className="h-4 w-4 text-white" />
                   View Full Wallpaper
@@ -1188,26 +1188,26 @@ export default function FusionWallpapersApp() {
                   type="button"
                   aria-label="Minimize preview"
                   onClick={() => setIsExpanded(false)}
-                  className="absolute bottom-5 right-5 h-11 w-11 bg-black/70 backdrop-blur-xl rounded-full border border-white/25 flex items-center justify-center text-white hover:bg-black/90 transition shadow-2xl active:scale-90 z-20"
+                  className="absolute bottom-5 right-5 h-10 w-10 bg-black/70 backdrop-blur-xl rounded-full border border-white/25 flex items-center justify-center text-white hover:bg-black/90 transition shadow-2xl active:scale-90 z-20"
                 >
-                  <Minimize2 className="h-5 w-5 text-white" />
+                  <Minimize2 className="h-4 w-4 text-white" />
                 </button>
               )}
             </div>
 
-            <div className="mt-5 text-center sm:text-left">
-              <h2 className="text-xl sm:text-2xl font-black text-white tracking-wide">{selectedWallpaper.title}</h2>
+            <div className="mt-4 text-center sm:text-left">
+              <h2 className="text-lg sm:text-xl font-bold text-white tracking-wide">{selectedWallpaper.title}</h2>
             </div>
 
-            <div className="mt-5 flex flex-col gap-3.5 w-full">
+            <div className="mt-4 flex flex-col gap-3 w-full">
               <Button
                 type="button"
                 variant="outline"
                 onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
                 disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className={`w-full h-14 rounded-2xl font-bold text-base border transition backdrop-blur-2xl shadow-[0_10px_30px_rgba(0,0,0,0.5)] active:scale-95 transition-transform ${savedIds.includes(selectedWallpaper.id) ? "bg-white text-black border-white hover:bg-white/90" : "bg-white/10 border-white/20 text-white hover:bg-white/20"}`}
+                className={`w-full h-13 rounded-2xl font-bold text-sm border transition backdrop-blur-2xl shadow-md active:scale-95 transition-transform ${savedIds.includes(selectedWallpaper.id) ? "bg-white text-black border-white hover:bg-white/90" : "bg-white/10 border-white/20 text-white hover:bg-white/20"}`}
               >
-                <Bookmark className={`h-5 w-5 mr-2.5 ${savedIds.includes(selectedWallpaper.id) ? "fill-black text-black" : ""}`} />
+                <Bookmark className={`h-4 w-4 mr-2 ${savedIds.includes(selectedWallpaper.id) ? "fill-black text-black" : ""}`} />
                 {savedIds.includes(selectedWallpaper.id) ? "Wallpaper Saved" : "Save Wallpaper"}
               </Button>
 
@@ -1215,22 +1215,22 @@ export default function FusionWallpapersApp() {
                 type="button"
                 onClick={() => triggerDirectDownload(selectedWallpaper)}
                 disabled={downloadingId === selectedWallpaper.id}
-                className="w-full h-14 rounded-2xl bg-white text-black font-extrabold text-base shadow-[0_10px_30px_rgba(255,255,255,0.25)] hover:bg-white/90 active:scale-95 transition-transform"
+                className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-md hover:bg-white/90 active:scale-95 transition-transform"
               >
                 {downloadingId === selectedWallpaper.id ? (
                   <>
-                    <Loader2 className="h-5 w-5 animate-spin mr-2.5" /> Preparing Original File...
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" /> Preparing Original File...
                   </>
                 ) : (
                   <>
-                    <Download className="h-5 w-5 mr-2.5" /> Download Wallpaper
+                    <Download className="h-4 w-4 mr-2" /> Download Wallpaper
                   </>
                 )}
               </Button>
             </div>
 
             {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
-              <div className={`mt-4 p-4 rounded-2xl border text-xs sm:text-sm flex items-center justify-between backdrop-blur-xl ${downloadStatus.type === "success" ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200" : "bg-red-950/70 border-red-400/40 text-red-200"}`}>
+              <div className={`mt-3 p-3 rounded-2xl border text-xs flex items-center justify-between backdrop-blur-xl ${downloadStatus.type === "success" ? "bg-emerald-950/70 border-emerald-400/40 text-emerald-200" : "bg-red-950/70 border-red-400/40 text-red-200"}`}>
                 <div className="flex items-center gap-2">
                   {downloadStatus.type === "success" ? <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" /> : <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />}
                   <span>{downloadStatus.message}</span>
@@ -1241,18 +1241,18 @@ export default function FusionWallpapersApp() {
               </div>
             )}
 
-            <div className="mt-10 pt-6 border-t border-white/10">
-              <h3 className="text-base sm:text-lg font-bold text-white tracking-wide mb-4">Related Wallpapers</h3>
+            <div className="mt-8 pt-5 border-t border-white/10">
+              <h3 className="text-sm sm:text-base font-bold text-white tracking-wide mb-3">Related Wallpapers</h3>
               {relatedWallpapers.length === 0 ? (
                 <p className="text-xs text-white/50">More wallpapers coming soon.</p>
               ) : (
                 <>
-                  <div className="columns-2 sm:columns-3 gap-3.5 space-y-3.5">
+                  <div className="columns-2 sm:columns-3 gap-3 space-y-3">
                     {relatedWallpapers.slice(0, relatedVisibleCount).map((rel) => renderWallpaperCard(rel))}
                   </div>
                   {relatedVisibleCount < relatedWallpapers.length && (
-                    <div className="mt-6 text-center">
-                      <Button type="button" variant="outline" onClick={() => setRelatedVisibleCount((prev) => prev + 6)} className="rounded-full bg-white/10 backdrop-blur-xl border-white/20 text-white hover:bg-white/20 px-6 h-11 active:scale-95 transition-transform">
+                    <div className="mt-5 text-center">
+                      <Button type="button" variant="outline" onClick={() => setRelatedVisibleCount((prev) => prev + 6)} className="rounded-full bg-white/10 backdrop-blur-xl border-white/20 text-white hover:bg-white/20 px-5 h-10 active:scale-95 transition-transform text-xs font-semibold">
                         Load More Related
                       </Button>
                     </div>
@@ -1266,119 +1266,119 @@ export default function FusionWallpapersApp() {
 
       {/* ================= AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
-        <DialogContent className="bg-[#121212]/95 backdrop-blur-3xl border border-white/20 text-white sm:max-w-md rounded-3xl p-6 shadow-[0_25px_70px_rgba(0,0,0,0.9)]">
+        <DialogContent className="bg-[#121212]/95 backdrop-blur-3xl border border-white/20 text-white sm:max-w-md rounded-3xl p-6 shadow-2xl">
           <DialogHeader>
-            <div className="mx-auto h-14 w-14 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center mb-2 text-white font-black text-2xl shadow-[0_0_20px_rgba(255,255,255,0.2)]">
+            <div className="mx-auto h-12 w-12 rounded-2xl bg-white/10 border border-white/20 flex items-center justify-center mb-2 text-white font-black text-xl">
               F
             </div>
-            <DialogTitle className="text-center text-xl font-black text-white">
+            <DialogTitle className="text-center text-lg font-black text-white">
               {authStep === "FORGOT_PASSWORD" ? "Reset Your Password" : authStep === "RESET_LINK_SENT" ? "Check Your Email" : authStep === "UPDATE_PASSWORD" ? "Set New Password" : authStep === "SIGN_UP" ? "Create Free Account" : "Sign In to Fusion"}
             </DialogTitle>
-            <DialogDescription className="text-center text-white/60 text-xs sm:text-sm">
+            <DialogDescription className="text-center text-white/60 text-xs">
               {authStep === "FORGOT_PASSWORD" ? "Enter your account email and we will send you a password reset link." : authStep === "RESET_LINK_SENT" ? "Follow the reset link sent to your inbox to choose a new password." : authStep === "UPDATE_PASSWORD" ? "Choose a strong new password for your Fusion Wallpapers account." : authReason}
             </DialogDescription>
           </DialogHeader>
 
           {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
-            <div className="grid grid-cols-2 gap-1.5 p-1.5 rounded-full bg-black/60 border border-white/15 mt-2">
-              <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-2 rounded-full text-xs font-bold transition active:scale-95 ${authStep === "SIGN_IN" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"}`}>Sign In</button>
-              <button type="button" onClick={() => { setAuthStep("SIGN_UP"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-2 rounded-full text-xs font-bold transition active:scale-95 ${authStep === "SIGN_UP" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"}`}>Create Account</button>
+            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-black/60 border border-white/15 mt-2">
+              <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-1.5 rounded-full text-xs font-bold transition active:scale-95 ${authStep === "SIGN_IN" ? "bg-white text-black shadow-sm" : "text-white/60 hover:text-white"}`}>Sign In</button>
+              <button type="button" onClick={() => { setAuthStep("SIGN_UP"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-1.5 rounded-full text-xs font-bold transition active:scale-95 ${authStep === "SIGN_UP" ? "bg-white text-black shadow-sm" : "text-white/60 hover:text-white"}`}>Create Account</button>
             </div>
           )}
 
           {authStep === "SIGN_IN" && (
-            <form onSubmit={handleSignInSubmit} className="space-y-4 pt-1">
-              {authSuccessMsg && <p className="text-xs text-emerald-300 bg-emerald-950/60 p-3 rounded-2xl border border-emerald-400/30 text-center">{authSuccessMsg}</p>}
-              <div className="space-y-1.5">
+            <form onSubmit={handleSignInSubmit} className="space-y-3.5 pt-1">
+              {authSuccessMsg && <p className="text-xs text-emerald-300 bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-400/30 text-center">{authSuccessMsg}</p>}
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-white/70 block">Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/40 absolute left-4 top-4" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-11 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                  <Mail className="h-4 w-4 text-white/40 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
                 </div>
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-semibold text-white/70">Password</label>
                   <button type="button" onClick={() => { setAuthStep("FORGOT_PASSWORD"); setAuthError(null); setAuthSuccessMsg(null); }} className="text-xs text-white hover:underline font-medium">Forgot password?</button>
                 </div>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
               </div>
-              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-3 rounded-2xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform mt-2">
+              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
+              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-xl bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform mt-1">
                 {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Log In"}
               </Button>
             </form>
           )}
 
           {authStep === "SIGN_UP" && (
-            <form onSubmit={handleSignUpSubmit} className="space-y-3.5 pt-1">
-              <div className="space-y-1.5">
+            <form onSubmit={handleSignUpSubmit} className="space-y-3 pt-1">
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-white/70 block">Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/40 absolute left-4 top-4" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-11 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                  <Mail className="h-4 w-4 text-white/40 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
                 </div>
               </div>
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-white/70 block">Create Password (min. 6 characters)</label>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-white/70 block">Create Password (min. 6 chars)</label>
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-white/70 block">Confirm Password</label>
-                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
               </div>
-              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-3 rounded-2xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform mt-2">
+              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
+              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-xl bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform mt-1">
                 {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Sign Up"}
               </Button>
             </form>
           )}
 
           {authStep === "FORGOT_PASSWORD" && (
-            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 pt-1">
-              <div className="space-y-1.5">
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-3.5 pt-1">
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-white/70 block">Account Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/40 absolute left-4 top-4" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-11 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                  <Mail className="h-4 w-4 text-white/40 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs w-full focus:border-white/50" />
                 </div>
               </div>
-              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-3 rounded-2xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading || resendCooldown > 0} className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform mt-2">
+              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
+              <Button type="submit" disabled={authLoading || resendCooldown > 0} className="w-full h-11 rounded-xl bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform mt-1">
                 {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : resendCooldown > 0 ? `Wait ${resendCooldown}s to Resend` : "Send Password Reset Link"}
               </Button>
               <div className="text-center pt-2">
-                <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); }} className="text-xs text-white/70 hover:text-white inline-flex items-center gap-1.5 font-medium">
-                  <ArrowLeft className="h-3.5 w-3.5" /> Back to Sign In
+                <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); }} className="text-xs text-white/70 hover:text-white inline-flex items-center gap-1 font-medium">
+                  <ArrowLeft className="h-3 w-3" /> Back to Sign In
                 </button>
               </div>
             </form>
           )}
 
           {authStep === "RESET_LINK_SENT" && (
-            <div className="space-y-4 pt-2 text-center">
-              <div className="p-4 rounded-2xl bg-emerald-950/60 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
+            <div className="space-y-3 pt-1 text-center">
+              <div className="p-3.5 rounded-xl bg-emerald-950/60 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
                 {authSuccessMsg || "Check your email inbox (and spam folder) for the password reset link."}
               </div>
-              <Button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className="w-full h-13 rounded-2xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-sm active:scale-95 transition-transform">
+              <Button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className="w-full h-11 rounded-xl bg-white/10 hover:bg-white/20 text-white border border-white/20 font-bold text-xs active:scale-95 transition-transform">
                 Return to Sign In
               </Button>
             </div>
           )}
 
           {authStep === "UPDATE_PASSWORD" && (
-            <form onSubmit={handleUpdateRecoveredPassword} className="space-y-4 pt-1">
-              {authSuccessMsg && <p className="text-xs text-white bg-black/60 p-3 rounded-2xl border border-white/20 text-center">{authSuccessMsg}</p>}
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-white/70 block">New Password (min. 6 characters)</label>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+            <form onSubmit={handleUpdateRecoveredPassword} className="space-y-3.5 pt-1">
+              {authSuccessMsg && <p className="text-xs text-white bg-black/60 p-2.5 rounded-xl border border-white/20 text-center">{authSuccessMsg}</p>}
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-white/70 block">New Password (min. 6 chars)</label>
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-xl h-11 text-xs w-full focus:border-white/50" />
               </div>
-              <div className="space-y-1.5">
+              <div className="space-y-1">
                 <label className="text-xs font-semibold text-white/70 block">Confirm New Password</label>
-                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-2xl h-12 text-sm w-full focus:border-white/50" />
+                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-xl h-11 text-xs w-full focus:border-white/50" />
               </div>
-              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-3 rounded-2xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform mt-2">
+              {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
+              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-xl bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform mt-1">
                 {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Save New Password"}
               </Button>
             </form>
@@ -1394,40 +1394,40 @@ export default function FusionWallpapersApp() {
             <DialogDescription className="text-xs text-white/60">Manage your profile display name and security credentials.</DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSaveAccountSettings} className="space-y-4 mt-2">
-            <div className="space-y-1.5">
+          <form onSubmit={handleSaveAccountSettings} className="space-y-3.5 mt-2">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Verified Email Address</label>
-              <Input type="email" disabled value={user?.email || ""} className="bg-black/40 border-white/10 text-white/60 rounded-2xl opacity-80 cursor-not-allowed h-12" />
+              <Input type="email" disabled value={user?.email || ""} className="bg-black/40 border-white/10 text-white/60 rounded-xl opacity-80 cursor-not-allowed h-11 text-xs" />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Display Name</label>
-              <Input type="text" required value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-2xl h-12 focus:border-white/50" />
+              <Input type="text" required value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-xl h-11 text-xs focus:border-white/50" />
             </div>
-            <div className="pt-2 border-t border-white/10 space-y-3">
-              <div className="flex items-center gap-2 text-xs font-bold text-white">
-                <KeyRound className="h-4 w-4 text-white" /> <span>Change Password (Optional)</span>
+            <div className="pt-2 border-t border-white/10 space-y-2.5">
+              <div className="flex items-center gap-1.5 text-xs font-bold text-white">
+                <KeyRound className="h-3.5 w-3.5 text-white" /> <span>Change Password (Optional)</span>
               </div>
               <div className="space-y-1">
-                <label className="text-xs text-white/60 block">New Password</label>
-                <Input type="password" placeholder="Leave blank to keep current" value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-2xl h-12 focus:border-white/50" />
+                <label className="text-[11px] text-white/60 block">New Password</label>
+                <Input type="password" placeholder="Leave blank to keep current" value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-xl h-11 text-xs focus:border-white/50" />
               </div>
               {newPasswordInput.length > 0 && (
                 <div className="space-y-1">
-                  <label className="text-xs text-white/60 block">Confirm New Password</label>
-                  <Input type="password" placeholder="Confirm new password" value={confirmNewPasswordInput} onChange={(e) => setConfirmNewPasswordInput(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-2xl h-12 focus:border-white/50" />
+                  <label className="text-[11px] text-white/60 block">Confirm New Password</label>
+                  <Input type="password" placeholder="Confirm new password" value={confirmNewPasswordInput} onChange={(e) => setConfirmNewPasswordInput(e.target.value)} className="bg-black/50 border-white/20 text-white rounded-xl h-11 text-xs focus:border-white/50" />
                 </div>
               )}
             </div>
             {settingsFeedback && (
-              <p className={`text-xs p-3 rounded-2xl border text-center ${settingsFeedback.type === "success" ? "bg-emerald-950/60 border-emerald-400/30 text-emerald-300" : "bg-red-950/60 border-red-400/30 text-red-300"}`}>
+              <p className={`text-xs p-2.5 rounded-xl border text-center ${settingsFeedback.type === "success" ? "bg-emerald-950/60 border-emerald-400/30 text-emerald-300" : "bg-red-950/60 border-red-400/30 text-red-300"}`}>
                 {settingsFeedback.text}
               </p>
             )}
-            <div className="flex items-center gap-3 pt-2">
-              <Button type="submit" disabled={settingsLoading} className="flex-1 rounded-2xl bg-white text-black font-extrabold h-12 hover:bg-white/90 active:scale-95 transition-transform">
-                {settingsLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : <><Check className="h-4 w-4 mr-2" /> Save Changes</>}
+            <div className="flex items-center gap-2.5 pt-2">
+              <Button type="submit" disabled={settingsLoading} className="flex-1 rounded-xl bg-white text-black font-bold h-11 text-xs hover:bg-white/90 active:scale-95 transition-transform">
+                {settingsLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : <><Check className="h-3.5 w-3.5 mr-1.5" /> Save Changes</>}
               </Button>
-              <Button type="button" variant="outline" onClick={handleSignOut} className="rounded-2xl bg-transparent border-red-500/30 text-red-300 hover:bg-red-950/40 h-12 px-5 active:scale-95 transition-transform">
+              <Button type="button" variant="outline" onClick={handleSignOut} className="rounded-xl bg-transparent border-red-500/30 text-red-300 hover:bg-red-950/40 h-11 px-4 text-xs active:scale-95 transition-transform">
                 Sign Out
               </Button>
             </div>
@@ -1443,17 +1443,17 @@ export default function FusionWallpapersApp() {
             <DialogDescription className="text-xs text-white/60">Publish a high-resolution wallpaper to Fusion Wallpapers.</DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAdminUpload} className="space-y-4 mt-2">
-            <div className="space-y-1.5">
+          <form onSubmit={handleAdminUpload} className="space-y-3.5 mt-2">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Wallpaper Name</label>
-              <Input type="text" required placeholder="e.g., Midnight Summit" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-2xl h-12 focus:border-white/50" />
+              <Input type="text" required placeholder="e.g., Midnight Summit" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="bg-black/50 border-white/20 text-white placeholder:text-white/30 rounded-xl h-11 text-xs focus:border-white/50" />
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Anime Category</label>
               <select
                 value={uploadCategory}
                 onChange={(e) => setUploadCategory(e.target.value)}
-                className="w-full h-12 bg-black/50 border border-white/20 text-white text-sm rounded-2xl px-4 focus:outline-none focus:border-white/50"
+                className="w-full h-11 bg-black/50 border border-white/20 text-white text-xs rounded-xl px-3 focus:outline-none focus:border-white/50"
               >
                 <option value="none" className="bg-black text-white">None (Uncategorized)</option>
                 {animeCategories.map(cat => (
@@ -1461,11 +1461,11 @@ export default function FusionWallpapersApp() {
                 ))}
               </select>
             </div>
-            <div className="space-y-1.5">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Wallpaper Image File</label>
-              <Input type="file" accept="image/*" required onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="bg-black/50 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-xl file:px-3 file:py-2 file:mr-3 file:text-xs file:font-bold rounded-2xl h-12 py-2" />
+              <Input type="file" accept="image/*" required onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="bg-black/50 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-lg file:px-2.5 file:py-1.5 file:mr-2.5 file:text-xs file:font-bold rounded-xl h-11 py-1.5 text-xs" />
             </div>
-            <Button type="submit" disabled={uploading || !uploadFile} className="w-full h-13 rounded-2xl bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform mt-2">
+            <Button type="submit" disabled={uploading || !uploadFile} className="w-full h-11 rounded-xl bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform mt-2">
               {uploading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : "Publish Wallpaper"}
             </Button>
           </form>
@@ -1480,13 +1480,13 @@ export default function FusionWallpapersApp() {
             <DialogDescription className="text-xs text-white/60">Reassign this wallpaper to a different anime category or set it as the banner.</DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleAdminEditSubmit} className="space-y-4 mt-2">
-            <div className="space-y-1.5">
+          <form onSubmit={handleAdminEditSubmit} className="space-y-3.5 mt-2">
+            <div className="space-y-1">
               <label className="text-xs font-semibold text-white/70 block">Select Category</label>
               <select
                 value={editCategorySelection}
                 onChange={(e) => setEditCategorySelection(e.target.value)}
-                className="w-full h-12 bg-black/50 border border-white/20 text-white text-sm rounded-2xl px-4 focus:outline-none focus:border-white/50"
+                className="w-full h-11 bg-black/50 border border-white/20 text-white text-xs rounded-xl px-3 focus:outline-none focus:border-white/50"
               >
                 <option value="none" className="bg-black text-white">None (Uncategorized)</option>
                 {animeCategories.map(cat => (
@@ -1495,20 +1495,20 @@ export default function FusionWallpapersApp() {
               </select>
             </div>
             
-            <div className="flex items-center gap-3 pt-2">
+            <div className="flex items-center gap-2.5 pt-1">
               <input 
                 type="checkbox" 
                 id="setBannerCheck"
                 checked={editSetAsBanner}
                 onChange={(e) => setEditSetAsBanner(e.target.checked)}
-                className="h-5 w-5 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
+                className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
               />
-              <label htmlFor="setBannerCheck" className="text-sm font-medium text-white cursor-pointer select-none">
+              <label htmlFor="setBannerCheck" className="text-xs font-medium text-white cursor-pointer select-none">
                 Set as category banner image
               </label>
             </div>
 
-            <Button type="submit" disabled={editingWallpaper} className="w-full h-13 rounded-2xl mt-2 bg-white text-black font-extrabold text-sm shadow-[0_0_25px_rgba(255,255,255,0.3)] hover:bg-white/90 active:scale-95 transition-transform">
+            <Button type="submit" disabled={editingWallpaper} className="w-full h-11 rounded-xl mt-1 bg-white text-black font-bold text-xs shadow-md hover:bg-white/90 active:scale-95 transition-transform">
               {editingWallpaper ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</> : "Save Changes"}
             </Button>
           </form>
