@@ -1,51 +1,47 @@
 @import "tailwindcss";
 
-/* 1. Define your custom 60-30-10 Palette & shadcn mappings for Tailwind v4 */
 @theme {
-  /* Your Custom Utility Classes (bg-sapphire, text-platinum, etc.) */
-    --color-sapphire: #0A1128;
-      --color-navy: #1C2541;
-        --color-silver: #D1D5DB;
-          --color-platinum: #E5E4E2;
+  /* Your Custom 60-30-10 Utility Classes */
+  --color-sapphire: #0A1128;
+  --color-navy: #1C2541;
+  --color-silver: #D1D5DB;
+  --color-platinum: #E5E4E2;
 
-            /* Shadcn/ui Theme Mappings (makes Modals & Buttons use your exact colors) */
-              --color-background: #0A1128;
-                --color-foreground: #E5E4E2;
-                  --color-card: #1C2541;
-                    --color-card-foreground: #E5E4E2;
-                      --color-popover: #1C2541;
-                        --color-popover-foreground: #E5E4E2;
-                          --color-primary: #E5E4E2;
-                            --color-primary-foreground: #0A1128;
-                              --color-secondary: #1C2541;
-                                --color-secondary-foreground: #D1D5DB;
-                                  --color-muted: #1C2541;
-                                    --color-muted-foreground: #D1D5DB;
-                                      --color-accent: #D1D5DB;
-                                        --color-accent-foreground: #0A1128;
-                                          --color-border: #2A3659;
-                                            --color-input: #2A3659;
-                                              --color-ring: #D1D5DB;
+  /* Shadcn/ui Theme Mappings */
+  --color-background: #0A1128;
+  --color-foreground: #E5E4E2;
+  --color-card: #1C2541;
+  --color-card-foreground: #E5E4E2;
+  --color-popover: #1C2541;
+  --color-popover-foreground: #E5E4E2;
+  --color-primary: #E5E4E2;
+  --color-primary-foreground: #0A1128;
+  --color-secondary: #1C2541;
+  --color-secondary-foreground: #D1D5DB;
+  --color-muted: #1C2541;
+  --color-muted-foreground: #D1D5DB;
+  --color-accent: #D1D5DB;
+  --color-accent-foreground: #0A1128;
+  --color-border: #2A3659;
+  --color-input: #2A3659;
+  --color-ring: #D1D5DB;
 
-                                                --radius-lg: 0.75rem;
-                                                  --radius-md: calc(0.75rem - 2px);
-                                                    --radius-sm: calc(0.75rem - 4px);
-                                                    }
+  --radius-lg: 0.75rem;
+  --radius-md: calc(0.75rem - 2px);
+  --radius-sm: calc(0.75rem - 4px);
+}
 
-                                                    /* 2. Global Base Styles & Mobile Image Protection */
-                                                    @layer base {
-                                                      * {
-                                                          border-color: var(--color-border);
-                                                            }
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
 
-                                                              body {
-                                                                  background-color: var(--color-sapphire);
-                                                                      color: var(--color-platinum);
-                                                                          -webkit-font-smoothing: antialiased;
-                                                                              /* Prevents long-press callout menus on mobile browsers */
-                                                                                  -webkit-touch-callout: none;
-                                                                                      -webkit-user-select: none;
-                                                                                          user-select: none;
-                                                                                            }
-                                                                                            }
-                                                                                            
+  body {
+    background-color: var(--color-sapphire);
+    color: var(--color-platinum);
+    -webkit-font-smoothing: antialiased;
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
+  }
+}
