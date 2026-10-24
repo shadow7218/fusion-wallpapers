@@ -11,14 +11,9 @@ import {
   Loader2,
   Trash2,
   Search,
-  SlidersHorizontal,
   Bookmark,
   Home,
   Compass,
-  Moon,
-  Mountain,
-  Smartphone,
-  Sparkles,
   X,
   Check,
   Settings,
@@ -45,16 +40,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 
-// Import your centralized categories config (Adjust path if needed: "./config/animeCategories" or "../config/animeCategories")
 import { animeCategories } from "../config/animeCategories";
 
-// --- DATA INTERFACES ---
 interface Wallpaper {
   id: string;
   title: string;
   image_url: string;
   storage_path: string;
-  category?: string;
+  category?: string | null;
   is_banner?: boolean;
   tags?: string[];
   downloads: number;
@@ -81,14 +74,6 @@ type AuthStep =
 const ADMIN_UUID =
   process.env.NEXT_PUBLIC_ADMIN_UUID || "ccd4e82e-93fe-427f-a163-e19367b08649";
 
-function FourPointStar({ className }: { className?: string }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="currentColor" className={className}>
-      <path d="M12 1L14.8 9.2L23 12L14.8 14.8L12 23L9.2 14.8L1 12L9.2 9.2L12 1Z" />
-    </svg>
-  );
-}
-
 function maskEmailAddress(email?: string | null): string {
   if (!email || !email.includes("@")) return "user***@fusion.app";
   const [local, domain] = email.split("@");
@@ -110,9 +95,9 @@ function formatSupabaseAuthError(err: any): string {
   return err?.message || "Authentication failed. Please try again.";
 }
 
-function getWallpaperCategory(w: Wallpaper): string {
-  if (w.category && w.category.trim() !== "") return w.category;
-  return animeCategories[0].id; // Fallback
+function getWallpaperCategory(w: Wallpaper): string | null {
+  if (w.category !== undefined) return w.category;
+  return null;
 }
 
 export default function FusionWallpapersApp() {
@@ -167,12 +152,12 @@ export default function FusionWallpapersApp() {
   // ADMIN STATES
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [uploadTitle, setUploadTitle] = useState<string>("");
-  const [uploadCategory, setUploadCategory] = useState<string>(animeCategories[0].id);
+  const [uploadCategory, setUploadCategory] = useState<string>("none");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState<boolean>(false);
 
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
-  const [editCategorySelection, setEditCategorySelection] = useState<string>("");
+  const [editCategorySelection, setEditCategorySelection] = useState<string>("none");
   const [editSetAsBanner, setEditSetAsBanner] = useState<boolean>(false);
   const [editingWallpaper, setEditingWallpaper] = useState<boolean>(false);
 
@@ -522,7 +507,7 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- ADMIN UPLOAD WITH AUTO-BANNER ---
+  // --- ADMIN UPLOAD WITH 'NONE' SUPPORT ---
   const handleAdminUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin || !uploadFile || !uploadTitle.trim() || uploading) return;
@@ -530,27 +515,30 @@ export default function FusionWallpapersApp() {
 
     try {
       const fileExt = uploadFile.name.split(".").pop();
-      const fileName = `${uploadCategory.toLowerCase()}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
+      const prefix = uploadCategory === "none" ? "general" : uploadCategory.toLowerCase();
+      const fileName = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
       const { error: storageError } = await supabase.storage.from("wallpapers").upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
       if (storageError) throw storageError;
 
       const { data: { publicUrl } } = supabase.storage.from("wallpapers").getPublicUrl(fileName);
 
-      // Check if this is the very first wallpaper for this category
-      const { data: existingInCategory } = await supabase.from("wallpapers").select("id").eq("category", uploadCategory).limit(1);
-      const isFirst = !existingInCategory || existingInCategory.length === 0;
+      let isFirst = false;
+      if (uploadCategory !== "none") {
+        const { data: existingInCategory } = await supabase.from("wallpapers").select("id").eq("category", uploadCategory).limit(1);
+        isFirst = !existingInCategory || existingInCategory.length === 0;
+      }
 
       const { error: dbError } = await supabase.from("wallpapers").insert([{
         title: uploadTitle.trim(),
         image_url: publicUrl,
         storage_path: fileName,
-        category: uploadCategory,
-        is_banner: isFirst // Automatically set banner if it's the first
+        category: uploadCategory === "none" ? null : uploadCategory,
+        is_banner: isFirst
       }]);
 
       if (dbError) {
-        const { error: fallbackError } = await supabase.from("wallpapers").insert([{ title: uploadTitle.trim(), image_url: publicUrl, storage_path: fileName }]);
+        const { error: fallbackError } = await supabase.from("wallpapers").insert([{ title: uploadTitle.trim(), image_url: publicUrl, storage_path: fileName, category: null }]);
         if (fallbackError) throw fallbackError;
       }
 
@@ -587,20 +575,20 @@ export default function FusionWallpapersApp() {
     setEditingWallpaper(true);
 
     try {
-      if (editSetAsBanner) {
-        // Unset old banner for this category
-        await supabase.from("wallpapers").update({ is_banner: false }).eq("category", editCategorySelection);
+      const finalCat = editCategorySelection === "none" ? null : editCategorySelection;
+      if (editSetAsBanner && finalCat) {
+        await supabase.from("wallpapers").update({ is_banner: false }).eq("category", finalCat);
       }
       
       const { error } = await supabase.from("wallpapers").update({
-        category: editCategorySelection,
-        is_banner: editSetAsBanner
+        category: finalCat,
+        is_banner: editSetAsBanner && finalCat !== null
       }).eq("id", selectedWallpaper.id);
 
       if (error) throw error;
       
       setIsEditModalOpen(false);
-      await fetchWallpapers(); // Refresh to show updated category/banner
+      await fetchWallpapers();
       closeWallpaperDetail();
     } catch (err: any) {
       alert(`Failed to update wallpaper: ${err.message}`);
@@ -614,14 +602,13 @@ export default function FusionWallpapersApp() {
     return wallpapers.filter((item) => {
       if (activeTab === "saved" && !savedIds.includes(item.id)) return false;
       
-      // If we are deep in a category view on Explore
       if (activeTab === "explore" && exploreView === "category" && selectedExploreCategory) {
          if (getWallpaperCategory(item) !== selectedExploreCategory) return false;
       }
 
       const q = searchQuery.trim().toLowerCase();
       if (q) {
-        const itemCat = getWallpaperCategory(item).toLowerCase();
+        const itemCat = (getWallpaperCategory(item) || "").toLowerCase();
         return item.title.toLowerCase().includes(q) || itemCat.includes(q) || item.storage_path.toLowerCase().includes(q);
       }
 
@@ -633,11 +620,11 @@ export default function FusionWallpapersApp() {
 
   const relatedWallpapers = useMemo(() => {
     if (!selectedWallpaper) return [];
-    const currentCat = getWallpaperCategory(selectedWallpaper).toLowerCase();
+    const currentCat = getWallpaperCategory(selectedWallpaper);
     const others = wallpapers.filter((w) => w.id !== selectedWallpaper.id);
     const scored = others.map((candidate) => {
       let score = 0;
-      if (getWallpaperCategory(candidate).toLowerCase() === currentCat) score += 10;
+      if (currentCat && getWallpaperCategory(candidate) === currentCat) score += 10;
       return { wallpaper: candidate, score };
     });
     scored.sort((a, b) => b.score - a.score);
@@ -724,11 +711,21 @@ export default function FusionWallpapersApp() {
               setSearchQuery("");
               window.scrollTo({ top: 0, behavior: "smooth" });
             }}
-            className="flex items-center gap-3 text-left focus:outline-none"
+            className="flex items-center gap-2.5 text-left focus:outline-none group"
           >
-            <div className="relative flex items-center justify-center">
-              <div className="absolute inset-0 bg-cyan-400 blur-md opacity-70 rounded-full" />
-              <FourPointStar className="h-6 w-6 sm:h-7 sm:w-7 text-white relative z-10 drop-shadow-[0_0_10px_rgba(56,189,248,0.9)]" />
+            {/* ITEM 1: REPLACED STAR LOGO WITH ACTUAL PROJECT LOGO (FALLBACK TO BRAND ICON IF NOT PRESENT) */}
+            <div className="h-9 w-9 rounded-xl bg-[#0A1128] border border-blue-400/30 flex items-center justify-center overflow-hidden shadow-[0_0_12px_rgba(56,189,248,0.3)] group-hover:border-cyan-400 transition">
+              <img
+                src="/logo.webp"
+                alt="Fusion Logo"
+                onError={(e) => {
+                  // Fallback if logo.png hasn't been added to public/ yet
+                  e.currentTarget.style.display = "none";
+                }}
+                className="h-full w-full object-cover"
+              />
+              {/* Fallback inline icon if logo.png is missing */}
+              <div className="absolute text-cyan-400 font-extrabold text-sm pointer-events-none">F</div>
             </div>
             <span className="text-lg sm:text-2xl font-bold tracking-[0.28em] text-white uppercase">
               FUSION
@@ -770,7 +767,7 @@ export default function FusionWallpapersApp() {
         </div>
       </header>
 
-      {/* ================= SEARCH BAR (Always present on Home & Explore) ================= */}
+      {/* ================= SEARCH BAR ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
         <div className="max-w-5xl w-full mx-auto px-4 pt-4 pb-2 z-10 space-y-3.5">
           <div className="relative flex items-center w-full h-12 rounded-full bg-[#0A1128]/85 backdrop-blur-xl border border-blue-400/35 px-4 shadow-[0_0_25px_rgba(37,99,235,0.2)] focus-within:border-cyan-400/80 focus-within:shadow-[0_0_30px_rgba(56,189,248,0.4)] transition-all">
@@ -874,24 +871,20 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
-        /* ================= NEW ANIME CATEGORY DISCOVERY (EXPLORE PAGE) ================= */
+        /* ================= ITEM 2: TWO PER ROW ANIME CATEGORY GRID ================= */
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-8">
           {exploreView === "grid" ? (
-            <div className="space-y-6 pt-2">
+            <div className="space-y-5 pt-2">
               <div className="flex items-center gap-2">
                 <Compass className="h-5 w-5 text-cyan-400" />
                 <h2 className="text-lg font-bold text-white tracking-wide">Explore Anime</h2>
               </div>
               
-              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-2 gap-3 sm:gap-4">
                 {animeCategories.map((cat) => {
-                  // Find wallpapers for this category
                   const catWallpapers = wallpapers.filter(w => getWallpaperCategory(w) === cat.id);
-                  // Find banner wallpaper
                   let banner = catWallpapers.find(w => w.is_banner);
-                  // Fallback to the first uploaded wallpaper in that category if no explicit banner
                   if (!banner && catWallpapers.length > 0) banner = catWallpapers[catWallpapers.length - 1];
-                  
                   const bannerUrl = banner ? banner.image_url : cat.fallbackBanner;
                   
                   return (
@@ -902,17 +895,17 @@ export default function FusionWallpapersApp() {
                         setExploreView("category");
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="group relative h-36 sm:h-44 rounded-3xl overflow-hidden bg-[#0A1128] border border-blue-400/30 cursor-pointer shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:border-cyan-400/70 hover:shadow-[0_0_30px_rgba(56,189,248,0.3)] transition-all duration-300"
+                      className="group relative h-32 sm:h-44 rounded-2xl sm:rounded-3xl overflow-hidden bg-[#0A1128] border border-blue-400/30 cursor-pointer shadow-[0_8px_30px_rgba(0,0,0,0.5)] hover:border-cyan-400/70 hover:shadow-[0_0_25px_rgba(56,189,248,0.3)] transition-all duration-300 flex flex-col justify-end"
                     >
                       <img 
                         src={bannerUrl} 
                         alt={cat.name} 
-                        className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none select-none"
+                        className="absolute inset-0 w-full h-full object-cover transition-transform duration-700 group-hover:scale-105 pointer-events-none select-none"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-[#050A18]/95 via-[#050A18]/40 to-transparent" />
-                      <div className="absolute bottom-4 left-4 right-4">
-                        <h3 className="text-lg font-bold text-white tracking-wide drop-shadow-md">{cat.name}</h3>
-                        <p className="text-xs text-silver mt-0.5">{catWallpapers.length} {catWallpapers.length === 1 ? 'wallpaper' : 'wallpapers'}</p>
+                      <div className="relative p-3 sm:p-4">
+                        <h3 className="text-xs sm:text-base font-bold text-white tracking-wide drop-shadow-md truncate">{cat.name}</h3>
+                        <p className="text-[10px] sm:text-xs text-silver mt-0.5">{catWallpapers.length} {catWallpapers.length === 1 ? 'wallpaper' : 'wallpapers'}</p>
                       </div>
                     </div>
                   );
@@ -976,7 +969,7 @@ export default function FusionWallpapersApp() {
             </div>
           ) : filteredWallpapers.length === 0 ? (
             <div className="bg-[#0A1128]/80 backdrop-blur-xl border border-blue-400/25 rounded-3xl p-10 text-center max-w-md mx-auto my-6">
-              <FourPointStar className="h-10 w-10 text-cyan-400 mx-auto mb-3 opacity-80" />
+              <div className="mx-auto h-10 w-10 rounded-full bg-cyan-400/20 flex items-center justify-center mb-3 text-cyan-400 font-bold">F</div>
               <h3 className="text-base font-semibold text-white">
                 {activeTab === "saved" ? "You haven't saved any wallpapers yet." : "No Wallpapers Found"}
               </h3>
@@ -992,7 +985,7 @@ export default function FusionWallpapersApp() {
         </main>
       )}
 
-      {/* ================= FLOATING LIQUID GLASS BOTTOM NAVIGATION ================= */}
+      {/* ================= FLOATING BOTTOM NAVIGATION ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
         className="fixed bottom-3 left-1/2 -translate-x-1/2 z-30 w-[88%] max-w-sm rounded-full bg-[#0A1128]/85 backdrop-blur-2xl border border-blue-400/40 px-5 py-2 shadow-[0_12px_35px_rgba(0,0,0,0.8),0_0_25px_rgba(37,99,235,0.25)]"
@@ -1017,7 +1010,7 @@ export default function FusionWallpapersApp() {
         </div>
       </nav>
 
-      {/* ================= DEDICATED WALLPAPER DETAIL SCREEN (ZERO EMPTY SPACE + MASSIVE STACKED BUTTONS + ADMIN EDIT) ================= */}
+      {/* ================= WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
@@ -1032,7 +1025,7 @@ export default function FusionWallpapersApp() {
                 <button
                   type="button"
                   onClick={() => {
-                    setEditCategorySelection(getWallpaperCategory(selectedWallpaper));
+                    setEditCategorySelection(selectedWallpaper.category || "none");
                     setEditSetAsBanner(!!selectedWallpaper.is_banner);
                     setIsEditModalOpen(true);
                   }}
@@ -1161,12 +1154,12 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= FIXED AUTHENTICATION & PASSWORD RESET MODAL ================= */}
+      {/* ================= ITEM 4: POLISHED AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
         <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6 shadow-[0_20px_60px_rgba(0,0,0,0.85)]">
           <DialogHeader>
-            <div className="mx-auto bg-[#050A18] p-3 rounded-full border border-cyan-400/30 mb-2 shadow-[0_0_15px_rgba(56,189,248,0.25)]">
-              <FourPointStar className="h-6 w-6 text-cyan-400" />
+            <div className="mx-auto h-12 w-12 rounded-full bg-cyan-400/20 border border-cyan-400/40 flex items-center justify-center mb-2 text-cyan-400 font-bold text-xl shadow-[0_0_15px_rgba(56,189,248,0.25)]">
+              F
             </div>
             <DialogTitle className="text-center text-xl font-bold text-white">
               {authStep === "FORGOT_PASSWORD" ? "Reset Your Password" : authStep === "RESET_LINK_SENT" ? "Check Your Email" : authStep === "UPDATE_PASSWORD" ? "Set New Password" : authStep === "SIGN_UP" ? "Create Free Account" : "Sign In to Fusion"}
@@ -1178,73 +1171,73 @@ export default function FusionWallpapersApp() {
 
           {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
             <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-[#050A18] border border-blue-400/20 mt-1">
-              <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-1.5 rounded-full text-xs font-semibold transition ${authStep === "SIGN_IN" ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white" : "text-silver hover:text-white"}`}>Sign In</button>
-              <button type="button" onClick={() => { setAuthStep("SIGN_UP"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-1.5 rounded-full text-xs font-semibold transition ${authStep === "SIGN_UP" ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white" : "text-silver hover:text-white"}`}>Create Account</button>
+              <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-2 rounded-full text-xs font-semibold transition ${authStep === "SIGN_IN" ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white shadow-md" : "text-silver hover:text-white"}`}>Sign In</button>
+              <button type="button" onClick={() => { setAuthStep("SIGN_UP"); setAuthError(null); setAuthSuccessMsg(null); }} className={`py-2 rounded-full text-xs font-semibold transition ${authStep === "SIGN_UP" ? "bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white shadow-md" : "text-silver hover:text-white"}`}>Create Account</button>
             </div>
           )}
 
           {authStep === "SIGN_IN" && (
-            <form onSubmit={handleSignInSubmit} className="space-y-4 mt-2">
+            <form onSubmit={handleSignInSubmit} className="space-y-4 pt-1">
               {authSuccessMsg && <p className="text-xs text-emerald-300 bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-400/30 text-center">{authSuccessMsg}</p>}
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1.5">Email Address</label>
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
                 </div>
               </div>
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
                   <label className="text-xs font-medium text-silver">Password</label>
                   <button type="button" onClick={() => { setAuthStep("FORGOT_PASSWORD"); setAuthError(null); setAuthSuccessMsg(null); }} className="text-[11px] text-cyan-400 hover:underline">Forgot password?</button>
                 </div>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
               </div>
               {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]">
-                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Sign In"}
+              <Button type="submit" disabled={authLoading} className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm shadow-[0_0_20px_rgba(56,189,248,0.45)] hover:opacity-95 transition mt-2">
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Log In"}
               </Button>
             </form>
           )}
 
           {authStep === "SIGN_UP" && (
-            <form onSubmit={handleSignUpSubmit} className="space-y-4 mt-2">
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1.5">Email Address</label>
+            <form onSubmit={handleSignUpSubmit} className="space-y-3.5 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
                 </div>
               </div>
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1">Create Password (min. 6 characters)</label>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Create Password (min. 6 characters)</label>
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
               </div>
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1">Confirm Password</label>
-                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Confirm Password</label>
+                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
               </div>
               {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]">
-                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Create Account"}
+              <Button type="submit" disabled={authLoading} className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm shadow-[0_0_20px_rgba(56,189,248,0.45)] hover:opacity-95 transition mt-2">
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Sign Up"}
               </Button>
             </form>
           )}
 
           {authStep === "FORGOT_PASSWORD" && (
-            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 mt-2">
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1.5">Account Email Address</label>
+            <form onSubmit={handleForgotPasswordSubmit} className="space-y-4 pt-1">
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Account Email Address</label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3" />
-                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-10" />
+                  <Mail className="h-4 w-4 text-silver/60 absolute left-3.5 top-3.5" />
+                  <Input type="email" required placeholder="you@example.com" value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="pl-10 bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11 text-sm w-full" />
                 </div>
               </div>
               {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading || resendCooldown > 0} className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]">
-                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : resendCooldown > 0 ? `Wait ${resendCooldown}s to Resend` : "Send Password Reset Link"}
+              <Button type="submit" disabled={authLoading || resendCooldown > 0} className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm shadow-[0_0_20px_rgba(56,189,248,0.45)] hover:opacity-95 transition mt-2">
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : resendCooldown > 0 ? `Wait ${resendCooldown}s to Resend` : "Send Password Reset Link"}
               </Button>
-              <div className="text-center pt-1">
+              <div className="text-center pt-2">
                 <button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); }} className="text-xs text-silver hover:text-white inline-flex items-center gap-1">
                   <ArrowLeft className="h-3.5 w-3.5" /> Back to Sign In
                 </button>
@@ -1253,30 +1246,30 @@ export default function FusionWallpapersApp() {
           )}
 
           {authStep === "RESET_LINK_SENT" && (
-            <div className="space-y-4 mt-2 text-center">
-              <div className="p-3.5 rounded-2xl bg-emerald-950/60 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
+            <div className="space-y-4 pt-2 text-center">
+              <div className="p-4 rounded-2xl bg-emerald-950/60 border border-emerald-400/30 text-xs text-emerald-200 leading-relaxed">
                 {authSuccessMsg || "Check your email inbox (and spam folder) for the password reset link."}
               </div>
-              <Button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className="w-full h-11 rounded-full bg-[#101A36] hover:bg-[#16244A] text-white border border-blue-400/30 font-semibold">
+              <Button type="button" onClick={() => { setAuthStep("SIGN_IN"); setAuthError(null); setAuthSuccessMsg(null); }} className="w-full h-12 rounded-2xl bg-[#101A36] hover:bg-[#16244A] text-white border border-blue-400/30 font-semibold text-sm">
                 Return to Sign In
               </Button>
             </div>
           )}
 
           {authStep === "UPDATE_PASSWORD" && (
-            <form onSubmit={handleUpdateRecoveredPassword} className="space-y-4 mt-2">
+            <form onSubmit={handleUpdateRecoveredPassword} className="space-y-4 pt-1">
               {authSuccessMsg && <p className="text-xs text-cyan-300 bg-[#050A18] p-2.5 rounded-xl border border-cyan-400/30 text-center">{authSuccessMsg}</p>}
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1">New Password (min. 6 characters)</label>
-                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-10" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">New Password (min. 6 characters)</label>
+                <Input type="password" required placeholder="••••••••" value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-11 text-sm w-full" />
               </div>
-              <div>
-                <label className="text-xs font-medium text-silver block mb-1">Confirm New Password</label>
-                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-10" />
+              <div className="space-y-1.5">
+                <label className="text-xs font-medium text-silver block">Confirm New Password</label>
+                <Input type="password" required placeholder="••••••••" value={authConfirmPassword} onChange={(e) => setAuthConfirmPassword(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-11 text-sm w-full" />
               </div>
               {authError && <p className="text-xs text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">{authError}</p>}
-              <Button type="submit" disabled={authLoading} className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_20px_rgba(56,189,248,0.45)]">
-                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save New Password"}
+              <Button type="submit" disabled={authLoading} className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold text-sm shadow-[0_0_20px_rgba(56,189,248,0.45)] hover:opacity-95 transition mt-2">
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : "Save New Password"}
               </Button>
             </form>
           )}
@@ -1294,11 +1287,11 @@ export default function FusionWallpapersApp() {
           <form onSubmit={handleSaveAccountSettings} className="space-y-4 mt-2">
             <div>
               <label className="text-xs font-medium text-silver block mb-1">Verified Email Address</label>
-              <Input type="email" disabled value={user?.email || ""} className="bg-[#050A18]/60 border-blue-400/20 text-silver rounded-xl opacity-80 cursor-not-allowed" />
+              <Input type="email" disabled value={user?.email || ""} className="bg-[#050A18]/60 border-blue-400/20 text-silver rounded-xl opacity-80 cursor-not-allowed h-11" />
             </div>
             <div>
               <label className="text-xs font-medium text-silver block mb-1">Display Name</label>
-              <Input type="text" required value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl" />
+              <Input type="text" required value={editDisplayName} onChange={(e) => setEditDisplayName(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-11" />
             </div>
             <div className="pt-2 border-t border-blue-400/15 space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-semibold text-cyan-400">
@@ -1306,12 +1299,12 @@ export default function FusionWallpapersApp() {
               </div>
               <div>
                 <label className="text-xs text-silver block mb-1">New Password</label>
-                <Input type="password" placeholder="Leave blank to keep current" value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl" />
+                <Input type="password" placeholder="Leave blank to keep current" value={newPasswordInput} onChange={(e) => setNewPasswordInput(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-11" />
               </div>
               {newPasswordInput.length > 0 && (
                 <div>
                   <label className="text-xs text-silver block mb-1">Confirm New Password</label>
-                  <Input type="password" placeholder="Confirm new password" value={confirmNewPasswordInput} onChange={(e) => setConfirmNewPasswordInput(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl" />
+                  <Input type="password" placeholder="Confirm new password" value={confirmNewPasswordInput} onChange={(e) => setConfirmNewPasswordInput(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white rounded-xl h-11" />
                 </div>
               )}
             </div>
@@ -1321,10 +1314,10 @@ export default function FusionWallpapersApp() {
               </p>
             )}
             <div className="flex items-center gap-2.5 pt-2">
-              <Button type="submit" disabled={settingsLoading} className="flex-1 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold">
-                {settingsLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Check className="h-4 w-4 mr-1.5" /> Save Changes</>}
+              <Button type="submit" disabled={settingsLoading} className="flex-1 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold h-11">
+                {settingsLoading ? <Loader2 className="h-4 w-4 animate-spin mx-auto" /> : <><Check className="h-4 w-4 mr-1.5" /> Save Changes</>}
               </Button>
-              <Button type="button" variant="outline" onClick={handleSignOut} className="rounded-full bg-transparent border-red-400/30 text-red-300 hover:bg-red-950/40">
+              <Button type="button" variant="outline" onClick={handleSignOut} className="rounded-full bg-transparent border-red-400/30 text-red-300 hover:bg-red-950/40 h-11 px-4">
                 Sign Out
               </Button>
             </div>
@@ -1332,7 +1325,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN UPLOAD MODAL ================= */}
+      {/* ================= ITEM 3: ADMIN UPLOAD WITH 'NONE' OPTION ================= */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
         <DialogContent className="bg-[#0A1128]/95 backdrop-blur-2xl border border-blue-400/40 text-platinum sm:max-w-md rounded-3xl p-6">
           <DialogHeader>
@@ -1343,15 +1336,16 @@ export default function FusionWallpapersApp() {
           <form onSubmit={handleAdminUpload} className="space-y-4 mt-2">
             <div>
               <label className="text-xs font-medium text-silver block mb-1">Wallpaper Name</label>
-              <Input type="text" required placeholder="e.g., Midnight Summit" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl" />
+              <Input type="text" required placeholder="e.g., Midnight Summit" value={uploadTitle} onChange={(e) => setUploadTitle(e.target.value)} className="bg-[#050A18] border-blue-400/30 text-white placeholder:text-silver/40 rounded-xl h-11" />
             </div>
             <div>
               <label className="text-xs font-medium text-silver block mb-1">Anime Category</label>
               <select
                 value={uploadCategory}
                 onChange={(e) => setUploadCategory(e.target.value)}
-                className="w-full h-10 bg-[#050A18] border border-blue-400/30 text-white text-sm rounded-xl px-3 focus:outline-none focus:border-cyan-400"
+                className="w-full h-11 bg-[#050A18] border border-blue-400/30 text-white text-sm rounded-xl px-3 focus:outline-none focus:border-cyan-400"
               >
+                <option value="none">None (Uncategorized)</option>
                 {animeCategories.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
@@ -1359,9 +1353,9 @@ export default function FusionWallpapersApp() {
             </div>
             <div>
               <label className="text-xs font-medium text-silver block mb-1">Wallpaper Image File</label>
-              <Input type="file" accept="image/*" required onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="bg-[#050A18] border-blue-400/30 text-silver file:bg-[#101A36] file:text-white file:border-0 file:rounded-lg file:px-2.5 file:py-1 file:mr-2 file:text-xs rounded-xl" />
+              <Input type="file" accept="image/*" required onChange={(e) => setUploadFile(e.target.files?.[0] || null)} className="bg-[#050A18] border-blue-400/30 text-silver file:bg-[#101A36] file:text-white file:border-0 file:rounded-lg file:px-2.5 file:py-2 file:mr-2 file:text-xs rounded-xl" />
             </div>
-            <Button type="submit" disabled={uploading || !uploadFile} className="w-full h-11 rounded-full bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]">
+            <Button type="submit" disabled={uploading || !uploadFile} className="w-full h-12 rounded-2xl bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)] hover:opacity-95 transition">
               {uploading ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Uploading...</> : "Publish Wallpaper"}
             </Button>
           </form>
@@ -1378,12 +1372,13 @@ export default function FusionWallpapersApp() {
 
           <form onSubmit={handleAdminEditSubmit} className="space-y-4 mt-2">
             <div>
-              <label className="text-xs font-medium text-silver block mb-1">Select New Category</label>
+              <label className="text-xs font-medium text-silver block mb-1">Select Category</label>
               <select
                 value={editCategorySelection}
                 onChange={(e) => setEditCategorySelection(e.target.value)}
-                className="w-full h-10 bg-[#050A18] border border-blue-400/30 text-white text-sm rounded-xl px-3 focus:outline-none focus:border-cyan-400"
+                className="w-full h-11 bg-[#050A18] border border-blue-400/30 text-white text-sm rounded-xl px-3 focus:outline-none focus:border-cyan-400"
               >
+                <option value="none">None (Uncategorized)</option>
                 {animeCategories.map(cat => (
                   <option key={cat.id} value={cat.id}>{cat.name}</option>
                 ))}
@@ -1403,7 +1398,7 @@ export default function FusionWallpapersApp() {
               </label>
             </div>
 
-            <Button type="submit" disabled={editingWallpaper} className="w-full h-11 rounded-full mt-2 bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)]">
+            <Button type="submit" disabled={editingWallpaper} className="w-full h-12 rounded-2xl mt-2 bg-gradient-to-r from-[#2563EB] to-[#38BDF8] text-white font-bold shadow-[0_0_18px_rgba(56,189,248,0.45)] hover:opacity-95 transition">
               {editingWallpaper ? <><Loader2 className="h-4 w-4 animate-spin mr-2" /> Saving...</> : "Save Changes"}
             </Button>
           </form>
