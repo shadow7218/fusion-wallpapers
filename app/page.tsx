@@ -764,7 +764,6 @@ export default function FusionWallpapersApp() {
                     className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-[11px] font-medium text-red-400 hover:bg-red-950/40 transition border-t border-white/10 mt-0.5 pt-1"
                   >
                     <Trash2 className="h-3 w-3" />
-                    <span>Delete</span>
                   </button>
                 )}
               </div>
@@ -785,7 +784,7 @@ export default function FusionWallpapersApp() {
     >
       <div className="pointer-events-none fixed top-0 left-1/2 -translate-x-1/2 w-[500px] h-[200px] bg-white/5 blur-[120px] rounded-full z-0" />
 
-      {/* ================= HEADER ================= */}
+      {/* ================= HEADER (CORRECTED LOGO PATH /logo.webp, NO FALLBACK "F") ================= */}
       <header className="sticky top-0 z-30 bg-[#070707]/90 px-4 pt-3 pb-2 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
@@ -797,15 +796,12 @@ export default function FusionWallpapersApp() {
             }}
             className="flex items-center gap-2 text-left focus:outline-none group active:scale-95 transition-transform"
           >
-            {/* LOGO FETCHED FROM PUBLIC FOLDER (/logo.webp) */}
-            <div className="h-7 w-7 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+            <div className="h-7 w-7 rounded-xl bg-white/10 border border-white/20 flex items-center justify-center overflow-hidden shrink-0 shadow-sm">
               <img
                 src="/logo.webp"
                 alt="Fusion Logo"
-                onError={(e) => { e.currentTarget.style.display = "none"; }}
                 className="h-full w-full object-cover"
               />
-              <div className="absolute text-white font-black text-xs pointer-events-none">F</div>
             </div>
             <span className="text-base sm:text-lg font-black tracking-[0.2em] text-white uppercase">
               FUSION
@@ -1083,30 +1079,54 @@ export default function FusionWallpapersApp() {
         </main>
       )}
 
-      {/* ================= BOTTOM NAVIGATION (NO LAGGY WHITE HIGHLIGHT BOX) ================= */}
+      {/* ================= BOTTOM NAVIGATION (WITH ACTIVE WHITE SELECTION PILL) ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
-        className="fixed bottom-3 left-1/2 -translate-x-1/2 z-40 w-[85%] max-w-xs rounded-full bg-black/75 backdrop-blur-xl border border-white/20 px-5 py-2 shadow-xl"
+        className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs rounded-full bg-black/80 backdrop-blur-2xl border border-white/20 p-1.5 shadow-2xl"
       >
-        <div className="flex items-center justify-between">
-          <button type="button" onClick={() => { setActiveTab("home"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-1.5 active:scale-90 transition-transform">
-            <Home className={`h-4 w-4 transition ${activeTab === "home" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/40 group-hover:text-white"}`} />
-            <span className={`text-[9px] font-semibold tracking-wide ${activeTab === "home" ? "text-white" : "text-white/40"}`}>Home</span>
+        <div className="flex items-center justify-between relative">
+          <button
+            type="button"
+            onClick={() => { setActiveTab("home"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+              activeTab === "home" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"
+            }`}
+          >
+            <Home className="h-4 w-4" />
+            <span className="text-[9px] font-bold tracking-wide">Home</span>
           </button>
           
-          <button type="button" onClick={() => { setActiveTab("explore"); setExploreView("grid"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-1.5 active:scale-90 transition-transform">
-            <Compass className={`h-4 w-4 transition ${activeTab === "explore" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/40 group-hover:text-white"}`} />
-            <span className={`text-[9px] font-semibold tracking-wide ${activeTab === "explore" ? "text-white" : "text-white/40"}`}>Explore</span>
+          <button
+            type="button"
+            onClick={() => { setActiveTab("explore"); setExploreView("grid"); setSearchQuery(""); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+              activeTab === "explore" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"
+            }`}
+          >
+            <Compass className="h-4 w-4" />
+            <span className="text-[9px] font-bold tracking-wide">Explore</span>
           </button>
           
-          <button type="button" onClick={() => { if (!user) requireAuthForAction("Sign in to view and sync your saved wallpapers across devices.", { type: "saved_tab" }); else { setActiveTab("saved"); window.scrollTo({ top: 0, behavior: "smooth" }); } }} className="flex flex-col items-center gap-0.5 group px-1.5 active:scale-90 transition-transform">
-            <Bookmark className={`h-4 w-4 transition ${activeTab === "saved" ? "text-white fill-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/40 group-hover:text-white"}`} />
-            <span className={`text-[9px] font-semibold tracking-wide ${activeTab === "saved" ? "text-white" : "text-white/40"}`}>Saved</span>
+          <button
+            type="button"
+            onClick={() => { if (!user) requireAuthForAction("Sign in to view and sync your saved wallpapers across devices.", { type: "saved_tab" }); else { setActiveTab("saved"); window.scrollTo({ top: 0, behavior: "smooth" }); } }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+              activeTab === "saved" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"
+            }`}
+          >
+            <Bookmark className={`h-4 w-4 ${activeTab === "saved" ? "fill-black" : ""}`} />
+            <span className="text-[9px] font-bold tracking-wide">Saved</span>
           </button>
           
-          <button type="button" onClick={() => { setActiveTab("profile"); window.scrollTo({ top: 0, behavior: "smooth" }); }} className="flex flex-col items-center gap-0.5 group px-1.5 active:scale-90 transition-transform">
-            <UserIcon className={`h-4 w-4 transition ${activeTab === "profile" ? "text-white drop-shadow-[0_0_8px_rgba(255,255,255,1)]" : "text-white/40 group-hover:text-white"}`} />
-            <span className={`text-[9px] font-semibold tracking-wide ${activeTab === "profile" ? "text-white" : "text-white/40"}`}>Profile</span>
+          <button
+            type="button"
+            onClick={() => { setActiveTab("profile"); window.scrollTo({ top: 0, behavior: "smooth" }); }}
+            className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
+              activeTab === "profile" ? "bg-white text-black shadow-md" : "text-white/60 hover:text-white"
+            }`}
+          >
+            <UserIcon className="h-4 w-4" />
+            <span className="text-[9px] font-bold tracking-wide">Profile</span>
           </button>
         </div>
       </nav>
