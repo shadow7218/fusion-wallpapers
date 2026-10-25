@@ -1,5 +1,6 @@
 /* ==========================================================================
    Fusion Wallpapers — Pure OLED Black & Subtly Clearer Liquid Glass Styles
+   With Light & Dark Theme Support
    ========================================================================== */
 
 :root {
@@ -125,4 +126,58 @@
 .glass-warp {
   backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 16px)) saturate(150%);
   -webkit-backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 16px)) saturate(150%);
+}
+
+/* ==========================================================================
+   Light Theme Overrides (.theme-light)
+   ========================================================================== */
+
+.theme-light {
+  background-color: #F4FEFF !important;
+  color: #0E2F76 !important;
+}
+
+.theme-light .glass-container {
+  background: rgba(255, 255, 255, 0.72);
+  border-color: rgba(14, 47, 118, 0.14);
+  box-shadow:
+    0 8px 24px rgba(14, 47, 118, 0.08),
+    inset 0 1px 0 rgba(255, 255, 255, 0.85);
+}
+
+.theme-light .glass-container::before {
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(14, 47, 118, 0.06) 45%,
+    transparent 100%
+  );
+}
+
+.theme-light .glass-button {
+  background: rgba(255, 255, 255, 0.75);
+  border-color: rgba(14, 47, 118, 0.16);
+  box-shadow:
+    0 4px 12px rgba(14, 47, 118, 0.07),
+    inset 0 1px 0 rgba(255, 255, 255, 0.9);
+}
+
+.theme-light .glass-button:hover {
+  background: rgba(255, 255, 255, 0.92);
+  border-color: rgba(14, 47, 118, 0.26);
+}
+
+.theme-light .glass-button-text {
+  color: #0E2F76;
+}
+
+.theme-light .glass-active-white {
+  background: #0E2F76 !important;
+  color: #ffffff !important;
+  border-color: #0E2F76 !important;
+  box-shadow: 0 4px 14px rgba(14, 47, 118, 0.25) !important;
+}
+
+.theme-light .glass-active-white .glass-button-text {
+  color: #ffffff !important;
 }
