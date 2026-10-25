@@ -1022,8 +1022,8 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      className="min-h-screen bg-transparent text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
-      onContextMenu={(e) => e.preventDefault()}
+  className="min-h-screen bg-transparent text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
+  onContextMenu={(e) => e.preventDefault()}
     >
       <LiquidGlassShaderDefs />
 
@@ -1107,7 +1107,7 @@ export default function FusionWallpapersApp() {
       )}
 
       {/* ================= LIQUID GLASS HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-black/45 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
+      <header className="sticky top-0 z-30 bg-black/40 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
