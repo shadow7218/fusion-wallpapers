@@ -32,6 +32,7 @@ import {
   Share2,
   Image as ImageIcon,
   ChevronLeft,
+  ChevronRight,
   ExternalLink,
   Flame,
   Moon,
@@ -60,7 +61,7 @@ interface Wallpaper {
   storage_path: string;
   category?: string | null;
   is_banner?: boolean;
-  tags?: string[];
+  tags?: string[] | null;
   downloads: number;
   created_at: string;
 }
@@ -75,6 +76,11 @@ interface PendingIntent {
   wallpaper?: Wallpaper;
 }
 
+interface LocalCurationOverride {
+  isHero?: boolean;
+  top10Rank?: number | null;
+}
+
 type AuthStep =
   | "SIGN_IN"
   | "SIGN_UP"
@@ -84,6 +90,9 @@ type AuthStep =
 
 const ADMIN_UUID =
   process.env.NEXT_PUBLIC_ADMIN_UUID || "ccd4e82e-93fe-427f-a163-e19367b08649";
+
+const HERO_TAG = "__pc_hero__";
+const TOP10_TAG_PREFIX = "__top10_";
 
 // Official Fusion social accounts configured in the project
 const OFFICIAL_FUSION_SOCIALS = [
@@ -122,10 +131,57 @@ function getWallpaperCategory(w: Wallpaper): string | null {
   return null;
 }
 
+function extractCurationFromWallpaper(
+  w: Wallpaper,
+  overrides: Record<string, LocalCurationOverride>
+): { isHero: boolean; top10Rank: number | null } {
+  const tags = Array.isArray(w.tags) ? w.tags : [];
+  let isHero = tags.includes(HERO_TAG);
+  let top10Rank: number | null = null;
+
+  for (const t of tags) {
+    if (t.startsWith(TOP10_TAG_PREFIX) && t.endsWith("__")) {
+      const num = parseInt(
+        t.slice(TOP10_TAG_PREFIX.length, t.length - 2),
+        10
+      );
+      if (!Number.isNaN(num) && num >= 1 && num <= 10) {
+        top10Rank = num;
+      }
+    }
+  }
+
+  const local = overrides[w.id];
+  if (local) {
+    if (local.isHero !== undefined) isHero = local.isHero;
+    if (local.top10Rank !== undefined) top10Rank = local.top10Rank;
+  }
+
+  return { isHero, top10Rank };
+}
+
+function buildUpdatedTags(
+  existingTags: string[] | null | undefined,
+  isHero: boolean,
+  top10Rank: number | null
+): string[] {
+  const base = Array.isArray(existingTags)
+    ? existingTags.filter(
+        (t) => t !== HERO_TAG && !t.startsWith(TOP10_TAG_PREFIX)
+      )
+    : [];
+  if (isHero) base.push(HERO_TAG);
+  if (top10Rank && top10Rank >= 1 && top10Rank <= 10) {
+    base.push(`${TOP10_TAG_PREFIX}${top10Rank}__`);
+  }
+  return base;
+}
+
 export default function FusionWallpapersApp() {
   const supabase = useMemo(() => createClient(), []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
+  const top10ScrollRef = useRef<HTMLDivElement>(null);
 
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -133,6 +189,11 @@ export default function FusionWallpapersApp() {
 
   // Theme state with localStorage persistence (Default: dark OLED)
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+
+  // Local fallback overrides in case database `tags` column isn't present
+  const [curationOverrides, setCurationOverrides] = useState<
+    Record<string, LocalCurationOverride>
+  >({});
 
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
   const [user, setUser] = useState<User | null>(null);
@@ -200,16 +261,22 @@ export default function FusionWallpapersApp() {
     text: string;
   } | null>(null);
 
+  // ADMIN UPLOAD STATES
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [uploadTitle, setUploadTitle] = useState<string>("");
   const [uploadCategory, setUploadCategory] = useState<string>("none");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadShowInHero, setUploadShowInHero] = useState<boolean>(false);
+  const [uploadTop10Rank, setUploadTop10Rank] = useState<string>("none");
   const [uploading, setUploading] = useState<boolean>(false);
 
+  // ADMIN EDIT STATES
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
   const [editCategorySelection, setEditCategorySelection] =
     useState<string>("none");
   const [editSetAsBanner, setEditSetAsBanner] = useState<boolean>(false);
+  const [editShowInHero, setEditShowInHero] = useState<boolean>(false);
+  const [editTop10Rank, setEditTop10Rank] = useState<string>("none");
   const [editingWallpaper, setEditingWallpaper] = useState<boolean>(false);
 
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
@@ -217,14 +284,23 @@ export default function FusionWallpapersApp() {
   const isAdmin = user?.id === ADMIN_UUID;
   const isLight = theme === "light";
 
-  // Load saved theme preference on mount
+  // Load saved theme & curation overrides on mount
   useEffect(() => {
-    const savedTheme =
-      typeof window !== "undefined"
-        ? (localStorage.getItem("fusion-theme") as "dark" | "light" | null)
-        : null;
+    if (typeof window === "undefined") return;
+    const savedTheme = localStorage.getItem("fusion-theme") as
+      | "dark"
+      | "light"
+      | null;
     if (savedTheme === "light" || savedTheme === "dark") {
       setTheme(savedTheme);
+    }
+    try {
+      const savedOverrides = localStorage.getItem("fusion-curation-overrides");
+      if (savedOverrides) {
+        setCurationOverrides(JSON.parse(savedOverrides));
+      }
+    } catch {
+      // Ignore parse errors
     }
   }, []);
 
@@ -292,13 +368,52 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  // Curated PC Hero Banner Wallpapers (Admin picks first; falls back to latest 5)
+  const pcHeroWallpapers = useMemo(() => {
+    if (wallpapers.length === 0) return [];
+    const adminChosen = wallpapers.filter(
+      (w) => extractCurationFromWallpaper(w, curationOverrides).isHero
+    );
+    if (adminChosen.length > 0) return adminChosen;
+    return wallpapers.slice(0, 5);
+  }, [wallpapers, curationOverrides]);
+
   useEffect(() => {
-    if (wallpapers.length === 0) return;
+    if (pcHeroWallpapers.length <= 1) return;
     const timer = setInterval(() => {
-      setPcHeroIndex((prev) => (prev + 1) % Math.min(wallpapers.length, 5));
+      setPcHeroIndex((prev) => (prev + 1) % pcHeroWallpapers.length);
     }, 5500);
     return () => clearInterval(timer);
-  }, [wallpapers]);
+  }, [pcHeroWallpapers.length]);
+
+  useEffect(() => {
+    if (pcHeroIndex >= pcHeroWallpapers.length && pcHeroWallpapers.length > 0) {
+      setPcHeroIndex(0);
+    }
+  }, [pcHeroWallpapers.length, pcHeroIndex]);
+
+  const handlePrevHero = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pcHeroWallpapers.length === 0) return;
+    setPcHeroIndex(
+      (prev) => (prev - 1 + pcHeroWallpapers.length) % pcHeroWallpapers.length
+    );
+  };
+
+  const handleNextHero = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (pcHeroWallpapers.length === 0) return;
+    setPcHeroIndex((prev) => (prev + 1) % pcHeroWallpapers.length);
+  };
+
+  const scrollTop10Row = (direction: "left" | "right") => {
+    if (!top10ScrollRef.current) return;
+    const scrollAmount = direction === "left" ? -420 : 420;
+    top10ScrollRef.current.scrollBy({
+      left: scrollAmount,
+      behavior: "smooth",
+    });
+  };
 
   useEffect(() => {
     const closeMenu = () => setActiveMenu(null);
@@ -757,6 +872,29 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  const saveLocalCurationOverride = (
+    wallpaperId: string,
+    isHero: boolean,
+    top10Rank: number | null
+  ) => {
+    setCurationOverrides((prev) => {
+      const next = { ...prev };
+      // If a rank is assigned, clear that same rank from any other wallpaper
+      if (top10Rank !== null) {
+        Object.keys(next).forEach((id) => {
+          if (id !== wallpaperId && next[id]?.top10Rank === top10Rank) {
+            next[id] = { ...next[id], top10Rank: null };
+          }
+        });
+      }
+      next[wallpaperId] = { isHero, top10Rank };
+      if (typeof window !== "undefined") {
+        localStorage.setItem("fusion-curation-overrides", JSON.stringify(next));
+      }
+      return next;
+    });
+  };
+
   const handleAdminUpload = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isAdmin || !uploadFile || !uploadTitle.trim() || uploading) return;
@@ -789,32 +927,58 @@ export default function FusionWallpapersApp() {
         isFirst = !existingInCategory || existingInCategory.length === 0;
       }
 
-      const { error: dbError } = await supabase.from("wallpapers").insert([
-        {
-          title: uploadTitle.trim(),
-          image_url: publicUrl,
-          storage_path: fileName,
-          category: uploadCategory === "none" ? null : uploadCategory,
-          is_banner: isFirst,
-        },
-      ]);
+      const parsedRank =
+        uploadTop10Rank === "none" ? null : parseInt(uploadTop10Rank, 10);
+      const customTags = buildUpdatedTags([], uploadShowInHero, parsedRank);
+
+      const { data: insertedData, error: dbError } = await supabase
+        .from("wallpapers")
+        .insert([
+          {
+            title: uploadTitle.trim(),
+            image_url: publicUrl,
+            storage_path: fileName,
+            category: uploadCategory === "none" ? null : uploadCategory,
+            is_banner: isFirst,
+            tags: customTags,
+          },
+        ])
+        .select()
+        .maybeSingle();
 
       if (dbError) {
-        const { error: fallbackError } = await supabase
+        const { data: fallbackData, error: fallbackError } = await supabase
           .from("wallpapers")
           .insert([
             {
               title: uploadTitle.trim(),
               image_url: publicUrl,
               storage_path: fileName,
-              category: null,
+              category: uploadCategory === "none" ? null : uploadCategory,
             },
-          ]);
+          ])
+          .select()
+          .maybeSingle();
         if (fallbackError) throw fallbackError;
+        if (fallbackData?.id) {
+          saveLocalCurationOverride(
+            fallbackData.id,
+            uploadShowInHero,
+            parsedRank
+          );
+        }
+      } else if (insertedData?.id) {
+        saveLocalCurationOverride(
+          insertedData.id,
+          uploadShowInHero,
+          parsedRank
+        );
       }
 
       setUploadTitle("");
       setUploadFile(null);
+      setUploadShowInHero(false);
+      setUploadTop10Rank("none");
       setIsUploadModalOpen(false);
       await fetchWallpapers();
     } catch (err: any) {
@@ -860,15 +1024,66 @@ export default function FusionWallpapersApp() {
           .eq("category", finalCat);
       }
 
+      const parsedRank =
+        editTop10Rank === "none" ? null : parseInt(editTop10Rank, 10);
+
+      // If assigning a specific Top 10 rank, remove that same rank tag from any other wallpaper
+      if (parsedRank !== null) {
+        const conflicting = wallpapers.filter(
+          (w) =>
+            w.id !== selectedWallpaper.id &&
+            extractCurationFromWallpaper(w, curationOverrides).top10Rank ===
+              parsedRank
+        );
+        for (const other of conflicting) {
+          const otherCuration = extractCurationFromWallpaper(
+            other,
+            curationOverrides
+          );
+          const cleanedTags = buildUpdatedTags(
+            other.tags,
+            otherCuration.isHero,
+            null
+          );
+          await supabase
+            .from("wallpapers")
+            .update({ tags: cleanedTags })
+            .eq("id", other.id);
+        }
+      }
+
+      const updatedTags = buildUpdatedTags(
+        selectedWallpaper.tags,
+        editShowInHero,
+        parsedRank
+      );
+
       const { error } = await supabase
         .from("wallpapers")
         .update({
           category: finalCat,
           is_banner: editSetAsBanner && finalCat !== null,
+          tags: updatedTags,
         })
         .eq("id", selectedWallpaper.id);
 
-      if (error) throw error;
+      if (error) {
+        // Fallback if `tags` column does not exist in DB schema
+        const { error: fallbackErr } = await supabase
+          .from("wallpapers")
+          .update({
+            category: finalCat,
+            is_banner: editSetAsBanner && finalCat !== null,
+          })
+          .eq("id", selectedWallpaper.id);
+        if (fallbackErr) throw fallbackErr;
+      }
+
+      saveLocalCurationOverride(
+        selectedWallpaper.id,
+        editShowInHero,
+        parsedRank
+      );
 
       setIsEditModalOpen(false);
       await fetchWallpapers();
@@ -940,11 +1155,29 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
-  // Daily Top 10 Ranking System
+  // Top 10 Today Ranking System (Respects Admin-assigned #1..#10 slots first, auto-fills remaining slots)
   const topTenDailyWallpapers = useMemo(() => {
     if (wallpapers.length === 0) return [];
     const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-    const scored = wallpapers.map((w, idx) => {
+
+    const pinnedByRank: Record<number, Wallpaper> = {};
+    const pinnedIds = new Set<string>();
+
+    wallpapers.forEach((w) => {
+      const { top10Rank } = extractCurationFromWallpaper(w, curationOverrides);
+      if (
+        top10Rank &&
+        top10Rank >= 1 &&
+        top10Rank <= 10 &&
+        !pinnedByRank[top10Rank]
+      ) {
+        pinnedByRank[top10Rank] = w;
+        pinnedIds.add(w.id);
+      }
+    });
+
+    const unpinned = wallpapers.filter((w) => !pinnedIds.has(w.id));
+    const scored = unpinned.map((w, idx) => {
       const hash =
         (w.id.charCodeAt(0) || 1) * 31 +
         (w.id.charCodeAt(w.id.length - 1) || 1) +
@@ -954,8 +1187,22 @@ export default function FusionWallpapersApp() {
       return { wallpaper: w, dailyScore };
     });
     scored.sort((a, b) => b.dailyScore - a.dailyScore);
-    return scored.slice(0, 10).map((s) => s.wallpaper);
-  }, [wallpapers]);
+
+    const result: Wallpaper[] = [];
+    let autoIdx = 0;
+    const maxCount = Math.min(10, wallpapers.length);
+
+    for (let rank = 1; rank <= maxCount; rank++) {
+      if (pinnedByRank[rank]) {
+        result.push(pinnedByRank[rank]);
+      } else if (autoIdx < scored.length) {
+        result.push(scored[autoIdx].wallpaper);
+        autoIdx++;
+      }
+    }
+
+    return result;
+  }, [wallpapers, curationOverrides]);
 
   const handleToggleCardMenu = (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -994,22 +1241,22 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- REUSABLE OFFICIAL SOCIALS CARD (CLEAN, NO EXTRA TEXT BELOW) ---
+  // --- REUSABLE OFFICIAL SOCIALS CARD (FITS SINGLE-LINE PC PROFILE GRID) ---
   const renderOfficialSocialsSection = () => (
     <GlassContainer
       type="rounded"
       borderRadius={24}
       tintOpacity={0.14}
-      className="p-3.5 sm:p-4"
+      className="p-4 h-full flex flex-col justify-center"
     >
-      <div className="space-y-2">
+      <div className="space-y-2 w-full">
         {OFFICIAL_FUSION_SOCIALS.map((social) => (
           <a
             key={social.id}
             href={social.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`flex items-center justify-between gap-3 w-full rounded-2xl px-3.5 py-2.5 transition active:scale-[0.98] border ${
+            className={`flex items-center justify-between gap-3 w-full rounded-2xl px-3.5 py-2 transition active:scale-[0.98] border ${
               isLight
                 ? "bg-[#0E2F76]/[0.04] hover:bg-[#0E2F76]/[0.08] border-[#0E2F76]/15"
                 : "bg-white/[0.04] hover:bg-white/[0.08] border-white/10"
@@ -1085,7 +1332,7 @@ export default function FusionWallpapersApp() {
           onClick={() => openWallpaperDetail(item)}
           className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-95 transition-transform duration-150 border ${
             isLight
-              ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15"
+              ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15 shadow-[0_6px_16px_rgba(14,47,118,0.08)]"
               : "bg-[#0a0a0a] border-white/10"
           } ${isTall ? "aspect-[9/16]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
@@ -1330,7 +1577,7 @@ export default function FusionWallpapersApp() {
               </GlassButton>
             )}
 
-            {/* ITEM 1: CIRCULAR THEME TOGGLE BUTTON ONLY ON THE PROFILE PAGE */}
+            {/* CIRCULAR THEME TOGGLE BUTTON ONLY ON THE PROFILE PAGE */}
             {activeTab === "profile" && (
               <GlassButton
                 typeShape="circle"
@@ -1429,12 +1676,13 @@ export default function FusionWallpapersApp() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-8 z-10">
           {user ? (
             <div className="space-y-6">
-              <div className="max-w-md mx-auto space-y-3">
+              {/* CHANGE 1: SIDE-BY-SIDE IN ONE LINE ON PC (md:grid-cols-2), STACKED ON MOBILE */}
+              <div className="max-w-md md:max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
                 <GlassContainer
                   type="rounded"
                   borderRadius={24}
                   tintOpacity={0.14}
-                  className="p-4"
+                  className="p-4 h-full flex flex-col justify-center"
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
@@ -1523,7 +1771,7 @@ export default function FusionWallpapersApp() {
                   </div>
                 </GlassContainer>
 
-                {/* ITEM 2: Official Socials Card Only (Removed extra "Follow Fusion" heading & description) */}
+                {/* Official Socials Card */}
                 {renderOfficialSocialsSection()}
               </div>
 
@@ -1576,11 +1824,11 @@ export default function FusionWallpapersApp() {
               </div>
             </div>
           ) : (
-            <div className="space-y-3.5 max-w-md w-full mx-auto my-4">
+            <div className="max-w-md md:max-w-3xl w-full mx-auto my-4 grid grid-cols-1 md:grid-cols-2 gap-3.5 items-stretch">
               <GlassContainer
                 type="rounded"
                 borderRadius={26}
-                className="p-6 text-center"
+                className="p-6 text-center flex flex-col justify-center"
               >
                 <div className="mx-auto h-11 w-11 rounded-2xl overflow-hidden border border-white/20 mb-3">
                   <img
@@ -1625,7 +1873,7 @@ export default function FusionWallpapersApp() {
                 </div>
               </GlassContainer>
 
-              {/* ITEM 2: Official Socials Card Only */}
+              {/* Official Socials Card */}
               {renderOfficialSocialsSection()}
             </div>
           )}
@@ -1725,10 +1973,17 @@ export default function FusionWallpapersApp() {
             {activeTab === "home" &&
               !searchQuery &&
               selectedPillCategory === "All" &&
-              wallpapers.length > 0 && (
+              pcHeroWallpapers.length > 0 && (
                 <div className="hidden md:block mb-9 space-y-7 pt-2">
-                  <div className="relative w-full h-[360px] rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.9)]">
-                    {wallpapers.slice(0, 5).map((hero, idx) => (
+                  {/* 1. PC Hero Banner with Natural Light-Mode Shadow & Transparent Scroll Buttons */}
+                  <div
+                    className={`group relative w-full h-[360px] rounded-3xl overflow-hidden bg-[#0a0a0a] border transition-shadow duration-300 ${
+                      isLight
+                        ? "border-[#0E2F76]/15 shadow-[0_12px_32px_rgba(14,47,118,0.12)]"
+                        : "border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
+                    }`}
+                  >
+                    {pcHeroWallpapers.map((hero, idx) => (
                       <div
                         key={hero.id}
                         className={`absolute inset-0 transition-opacity duration-700 ease-out cursor-pointer ${
@@ -1743,7 +1998,7 @@ export default function FusionWallpapersApp() {
                           alt={hero.title}
                           className="w-full h-full object-cover"
                         />
-                        <div className="absolute inset-0 bg-gradient-to-t from-black via-black/35 to-transparent" />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
                         <div className="absolute bottom-7 left-8 right-8 max-w-xl space-y-2">
                           <span className="inline-block px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-[10px] font-bold text-white border border-white/25 uppercase tracking-widest">
                             Featured Today
@@ -1771,16 +2026,38 @@ export default function FusionWallpapersApp() {
                               }}
                               className="px-4 h-9 text-xs font-bold"
                             >
-                              <Bookmark className="h-3.5 w-3.5" />
-                              <span>Save</span>
+                              <Bookmark className="h-3.5 w-3.5 text-white" />
+                              <span className="text-white">Save</span>
                             </GlassButton>
                           </div>
                         </div>
                       </div>
                     ))}
 
+                    {/* Small Rounded Full-Transparent Scroll Buttons on Banner */}
+                    {pcHeroWallpapers.length > 1 && (
+                      <>
+                        <button
+                          type="button"
+                          aria-label="Previous featured wallpaper"
+                          onClick={handlePrevHero}
+                          className="absolute left-3.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition active:scale-90"
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Next featured wallpaper"
+                          onClick={handleNextHero}
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 z-20 h-9 w-9 rounded-full bg-black/20 hover:bg-black/45 backdrop-blur-md border border-white/20 flex items-center justify-center text-white transition active:scale-90"
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </>
+                    )}
+
                     <div className="absolute bottom-6 right-8 z-20 flex items-center gap-1.5">
-                      {wallpapers.slice(0, 5).map((_, idx) => (
+                      {pcHeroWallpapers.map((_, idx) => (
                         <button
                           key={idx}
                           type="button"
@@ -1795,16 +2072,49 @@ export default function FusionWallpapersApp() {
                     </div>
                   </div>
 
-                  {/* Top 10 Today Ranking System */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2">
-                      <Flame className="h-5 w-5" />
-                      <h3 className="text-lg font-black tracking-wide">
-                        Top 10 Today
-                      </h3>
+                  {/* 2. Top 10 Today Ranking System with Transparent Scroll Buttons & Balanced Shadow */}
+                  <div className="space-y-3 relative">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Flame className="h-5 w-5" />
+                        <h3 className="text-lg font-black tracking-wide">
+                          Top 10 Today
+                        </h3>
+                      </div>
+
+                      {/* Small Rounded Transparent Scroll Buttons for Top 10 Row */}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          aria-label="Scroll Top 10 left"
+                          onClick={() => scrollTop10Row("left")}
+                          className={`h-8 w-8 rounded-full backdrop-blur-md border flex items-center justify-center transition active:scale-90 ${
+                            isLight
+                              ? "bg-[#0E2F76]/[0.06] hover:bg-[#0E2F76]/15 border-[#0E2F76]/15 text-[#0E2F76]"
+                              : "bg-white/[0.06] hover:bg-white/15 border-white/15 text-white"
+                          }`}
+                        >
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button
+                          type="button"
+                          aria-label="Scroll Top 10 right"
+                          onClick={() => scrollTop10Row("right")}
+                          className={`h-8 w-8 rounded-full backdrop-blur-md border flex items-center justify-center transition active:scale-90 ${
+                            isLight
+                              ? "bg-[#0E2F76]/[0.06] hover:bg-[#0E2F76]/15 border-[#0E2F76]/15 text-[#0E2F76]"
+                              : "bg-white/[0.06] hover:bg-white/15 border-white/15 text-white"
+                          }`}
+                        >
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
 
-                    <div className="flex items-center gap-5 overflow-x-auto no-scrollbar py-2 pl-2 pr-4">
+                    <div
+                      ref={top10ScrollRef}
+                      className="flex items-center gap-5 overflow-x-auto no-scrollbar py-2.5 pl-2 pr-4 scroll-smooth"
+                    >
                       {topTenDailyWallpapers.map((rankedItem, rankIdx) => (
                         <div
                           key={rankedItem.id}
@@ -1820,7 +2130,13 @@ export default function FusionWallpapersApp() {
                           >
                             {rankIdx + 1}
                           </span>
-                          <div className="relative z-10 w-32 h-48 rounded-2xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-xl group-hover:scale-105 group-hover:border-white/40 transition-all duration-300">
+                          <div
+                            className={`relative z-10 w-32 h-48 rounded-2xl overflow-hidden bg-[#0a0a0a] border group-hover:scale-105 transition-all duration-300 ${
+                              isLight
+                                ? "border-[#0E2F76]/15 shadow-[0_10px_24px_rgba(14,47,118,0.12)] group-hover:border-[#0E2F76]/35"
+                                : "border-white/15 shadow-xl group-hover:border-white/40"
+                            }`}
+                          >
                             <img
                               src={rankedItem.image_url}
                               alt={rankedItem.title}
@@ -1840,7 +2156,7 @@ export default function FusionWallpapersApp() {
                 </div>
               )}
 
-            {/* ITEM 3: CLEAN, WELL-SPACED SAVED WALLPAPERS HEADING & COUNT */}
+            {/* CLEAN, WELL-SPACED SAVED WALLPAPERS HEADING & COUNT */}
             {activeTab === "saved" && (
               <div className="pt-4 pb-4 px-0.5 flex items-baseline justify-between">
                 <h1
@@ -1913,7 +2229,7 @@ export default function FusionWallpapersApp() {
             )}
           </div>
 
-          {/* ITEM 4: SHOW "BUILT BY FUSION" ONLY ON THE HOME PAGE (NOT ON SAVED OR SEARCH) */}
+          {/* SHOW "BUILT BY FUSION" ONLY ON THE HOME PAGE */}
           {activeTab === "home" && !searchQuery && renderBuiltByFusionFooter()}
         </main>
       )}
@@ -2080,16 +2396,26 @@ export default function FusionWallpapersApp() {
                 <GlassButton
                   typeShape="pill"
                   onClick={() => {
+                    const currentCuration = extractCurationFromWallpaper(
+                      selectedWallpaper,
+                      curationOverrides
+                    );
                     setEditCategorySelection(
                       selectedWallpaper.category || "none"
                     );
                     setEditSetAsBanner(!!selectedWallpaper.is_banner);
+                    setEditShowInHero(currentCuration.isHero);
+                    setEditTop10Rank(
+                      currentCuration.top10Rank
+                        ? String(currentCuration.top10Rank)
+                        : "none"
+                    );
                     setIsEditModalOpen(true);
                   }}
                   className="h-8 px-3.5 text-[11px] font-bold"
                 >
                   <Edit3 className="h-3 w-3" />
-                  <span>Edit Category</span>
+                  <span>Edit Wallpaper</span>
                 </GlassButton>
               </div>
             )}
@@ -2702,7 +3028,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN UPLOAD MODAL ================= */}
+      {/* ================= ADMIN UPLOAD MODAL (WITH PC HERO & TOP 10 CONTROLS) ================= */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
         <DialogContent
           style={{
@@ -2727,35 +3053,79 @@ export default function FusionWallpapersApp() {
               <Input
                 type="text"
                 required
-                placeholder="e.g., Levi Ackerman"
+                placeholder="e.g., Sung Jin-woo"
                 value={uploadTitle}
                 onChange={(e) => setUploadTitle(e.target.value)}
                 className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs"
               />
             </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Anime Category
-              </label>
-              <select
-                value={uploadCategory}
-                onChange={(e) => setUploadCategory(e.target.value)}
-                className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-3 focus:outline-none"
-              >
-                <option value="none" className="bg-black text-white">
-                  None (Uncategorized)
-                </option>
-                {animeCategories.map((cat) => (
-                  <option
-                    key={cat.id}
-                    value={cat.id}
-                    className="bg-black text-white"
-                  >
-                    {cat.name}
+
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-white/85 block">
+                  Anime Category
+                </label>
+                <select
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
+                >
+                  <option value="none" className="bg-black text-white">
+                    None (Uncategorized)
                   </option>
-                ))}
-              </select>
+                  {animeCategories.map((cat) => (
+                    <option
+                      key={cat.id}
+                      value={cat.id}
+                      className="bg-black text-white"
+                    >
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-white/85 block">
+                  PC Top 10 Rank
+                </label>
+                <select
+                  value={uploadTop10Rank}
+                  onChange={(e) => setUploadTop10Rank(e.target.value)}
+                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
+                >
+                  <option value="none" className="bg-black text-white">
+                    Auto (Not pinned)
+                  </option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option
+                      key={num}
+                      value={String(num)}
+                      className="bg-black text-white"
+                    >
+                      Rank #{num}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            <div className="flex items-center gap-2 pt-0.5">
+              <input
+                type="checkbox"
+                id="uploadHeroCheck"
+                checked={uploadShowInHero}
+                onChange={(e) => setUploadShowInHero(e.target.checked)}
+                className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
+              />
+              <label
+                htmlFor="uploadHeroCheck"
+                className="text-xs font-medium text-white cursor-pointer select-none"
+              >
+                Show in PC Top Hero Banner
+              </label>
+            </div>
+
             <div className="space-y-1">
               <label className="text-[11px] font-semibold text-white/85 block">
                 Wallpaper Image File
@@ -2768,6 +3138,7 @@ export default function FusionWallpapersApp() {
                 className="bg-black/70 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-lg file:px-2 file:py-1 file:mr-2 file:text-[11px] file:font-bold rounded-xl h-10 py-1 text-xs"
               />
             </div>
+
             <GlassButton
               type="submit"
               typeShape="pill"
@@ -2788,7 +3159,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN EDIT CATEGORY MODAL ================= */}
+      {/* ================= ADMIN EDIT WALLPAPER MODAL (CATEGORY, BANNER, PC HERO & TOP 10 RANK) ================= */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent
           style={{
@@ -2798,53 +3169,96 @@ export default function FusionWallpapersApp() {
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black text-white">
-              Edit Wallpaper Category
+              Edit Wallpaper & PC Placement
             </DialogTitle>
             <DialogDescription className="text-[11px] text-white/75">
-              Reassign this wallpaper to a different anime category or set it as
-              the banner.
+              Update category, anime banner, PC Hero Banner, or Top 10 ranking.
             </DialogDescription>
           </DialogHeader>
 
           <form onSubmit={handleAdminEditSubmit} className="space-y-3 mt-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Select Category
-              </label>
-              <select
-                value={editCategorySelection}
-                onChange={(e) => setEditCategorySelection(e.target.value)}
-                className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-3 focus:outline-none"
-              >
-                <option value="none" className="bg-black text-white">
-                  None (Uncategorized)
-                </option>
-                {animeCategories.map((cat) => (
-                  <option
-                    key={cat.id}
-                    value={cat.id}
-                    className="bg-black text-white"
-                  >
-                    {cat.name}
+            <div className="grid grid-cols-2 gap-2.5">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-white/85 block">
+                  Select Category
+                </label>
+                <select
+                  value={editCategorySelection}
+                  onChange={(e) => setEditCategorySelection(e.target.value)}
+                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
+                >
+                  <option value="none" className="bg-black text-white">
+                    None (Uncategorized)
                   </option>
-                ))}
-              </select>
+                  {animeCategories.map((cat) => (
+                    <option
+                      key={cat.id}
+                      value={cat.id}
+                      className="bg-black text-white"
+                    >
+                      {cat.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-white/85 block">
+                  PC Top 10 Rank
+                </label>
+                <select
+                  value={editTop10Rank}
+                  onChange={(e) => setEditTop10Rank(e.target.value)}
+                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
+                >
+                  <option value="none" className="bg-black text-white">
+                    Auto (Not pinned)
+                  </option>
+                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
+                    <option
+                      key={num}
+                      value={String(num)}
+                      className="bg-black text-white"
+                    >
+                      Rank #{num}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
-            <div className="flex items-center gap-2 pt-1">
-              <input
-                type="checkbox"
-                id="setBannerCheck"
-                checked={editSetAsBanner}
-                onChange={(e) => setEditSetAsBanner(e.target.checked)}
-                className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
-              />
-              <label
-                htmlFor="setBannerCheck"
-                className="text-xs font-medium text-white cursor-pointer select-none"
-              >
-                Set as category banner image
-              </label>
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="setBannerCheck"
+                  checked={editSetAsBanner}
+                  onChange={(e) => setEditSetAsBanner(e.target.checked)}
+                  className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
+                />
+                <label
+                  htmlFor="setBannerCheck"
+                  className="text-xs font-medium text-white cursor-pointer select-none"
+                >
+                  Set as category banner image
+                </label>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="editHeroCheck"
+                  checked={editShowInHero}
+                  onChange={(e) => setEditShowInHero(e.target.checked)}
+                  className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
+                />
+                <label
+                  htmlFor="editHeroCheck"
+                  className="text-xs font-medium text-white cursor-pointer select-none"
+                >
+                  Show in PC Top Hero Banner
+                </label>
+              </div>
             </div>
 
             <GlassButton
