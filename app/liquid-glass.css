@@ -1,63 +1,21 @@
 /* ==========================================================================
-   dashersw/liquid-glass-js — Toned-Down Dark Smoked Liquid Glass Styles
-   + Apple Music Style Floating Ambient Artwork Keyframes
+   Fusion Wallpapers — Pure OLED Black & Subtly Clearer Liquid Glass Styles
    ========================================================================== */
 
 :root {
-  --lg-edge-intensity: 0.015;
-  --lg-rim-intensity: 0.06;
-  --lg-base-intensity: 0.01;
-  --lg-blur-radius: 20px;
-  --lg-tint-opacity: 0.14;
+  --lg-blur-radius: 16px;
+  --lg-tint-opacity: 0.12;
 }
 
-/* Smooth GPU-Accelerated Floating Animations for the Music-Player Style Background */
-@keyframes ambient-float-1 {
-  0% {
-    transform: translate3d(-8%, -6%, 0) scale(1.25) rotate(0deg);
-  }
-  33% {
-    transform: translate3d(10%, 8%, 0) scale(1.4) rotate(120deg);
-  }
-  66% {
-    transform: translate3d(-6%, 12%, 0) scale(1.3) rotate(240deg);
-  }
-  100% {
-    transform: translate3d(-8%, -6%, 0) scale(1.25) rotate(360deg);
-  }
-}
-
-@keyframes ambient-float-2 {
-  0% {
-    transform: translate3d(10%, 10%, 0) scale(1.35) rotate(360deg);
-  }
-  50% {
-    transform: translate3d(-12%, -8%, 0) scale(1.5) rotate(180deg);
-  }
-  100% {
-    transform: translate3d(10%, 10%, 0) scale(1.35) rotate(0deg);
-  }
-}
-
-.animate-ambient-1 {
-  animation: ambient-float-1 26s ease-in-out infinite;
-  will-change: transform;
-}
-
-.animate-ambient-2 {
-  animation: ambient-float-2 32s ease-in-out infinite;
-  will-change: transform;
-}
-
-/* Base Glass Container (.glass-container) */
+/* Base Glass Container (.glass-container) — Subtly clearer over OLED #000000 */
 .glass-container {
-  background: rgba(18, 20, 26, 0.45);
-  backdrop-filter: blur(var(--lg-blur-radius, 20px)) saturate(180%);
-  -webkit-backdrop-filter: blur(var(--lg-blur-radius, 20px)) saturate(180%);
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(12, 12, 14, 0.34);
+  backdrop-filter: blur(var(--lg-blur-radius, 16px)) saturate(140%);
+  -webkit-backdrop-filter: blur(var(--lg-blur-radius, 16px)) saturate(140%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 8px 24px rgba(0, 0, 0, 0.45),
-    inset 0 1px 1px rgba(255, 255, 255, 0.16);
+    0 8px 24px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
   transition:
     transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1),
     box-shadow 0.2s ease,
@@ -66,7 +24,7 @@
   isolation: isolate;
 }
 
-/* Subtle Top Rim Sheen */
+/* Delicate Top Rim Highlight */
 .glass-container::before {
   content: "";
   position: absolute;
@@ -75,8 +33,8 @@
   padding: 1px;
   background: linear-gradient(
     165deg,
-    rgba(255, 255, 255, 0.24) 0%,
-    rgba(255, 255, 255, 0.04) 45%,
+    rgba(255, 255, 255, 0.18) 0%,
+    rgba(255, 255, 255, 0.03) 45%,
     transparent 100%
   );
   -webkit-mask:
@@ -117,20 +75,20 @@
   cursor: pointer;
   user-select: none;
   -webkit-tap-highlight-color: transparent;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.15);
+  background: rgba(255, 255, 255, 0.055);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 4px 14px rgba(0, 0, 0, 0.3),
-    inset 0 1px 1px rgba(255, 255, 255, 0.14);
+    0 4px 14px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
 }
 
 .glass-button:hover {
-  background: rgba(255, 255, 255, 0.14);
-  border-color: rgba(255, 255, 255, 0.24);
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .glass-button:active {
-  transform: scale(0.94);
+  transform: scale(0.95);
 }
 
 .glass-button-circle {
@@ -142,13 +100,13 @@
 /* Active White Pill */
 .glass-active-white {
   background: #ffffff !important;
-  color: #070707 !important;
+  color: #000000 !important;
   border-color: #ffffff !important;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.35) !important;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.45) !important;
 }
 
 .glass-active-white .glass-button-text {
-  color: #070707 !important;
+  color: #000000 !important;
   text-shadow: none !important;
 }
 
@@ -163,8 +121,8 @@
   gap: 0.4rem;
 }
 
-/* Optical Warp Distortion */
+/* Subtle Optical Refraction */
 .glass-warp {
-  backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 20px)) saturate(180%);
-  -webkit-backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 20px)) saturate(180%);
+  backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 16px)) saturate(150%);
+  -webkit-backdrop-filter: url(#liquid-glass-refraction) blur(var(--lg-blur-radius, 16px)) saturate(150%);
 }
