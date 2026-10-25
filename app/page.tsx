@@ -34,6 +34,8 @@ import {
   ChevronLeft,
   ExternalLink,
   Flame,
+  Moon,
+  Sun,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import {
@@ -129,6 +131,9 @@ export default function FusionWallpapersApp() {
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
+  // Theme state with localStorage persistence (Default: dark OLED)
+  const [theme, setTheme] = useState<"dark" | "light">("dark");
+
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
@@ -210,6 +215,37 @@ export default function FusionWallpapersApp() {
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
 
   const isAdmin = user?.id === ADMIN_UUID;
+  const isLight = theme === "light";
+
+  // Load saved theme preference on mount
+  useEffect(() => {
+    const savedTheme =
+      typeof window !== "undefined"
+        ? (localStorage.getItem("fusion-theme") as "dark" | "light" | null)
+        : null;
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+    }
+  }, []);
+
+  // Sync theme with document root & body
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const htmlEl = document.documentElement;
+    const bodyEl = document.body;
+    if (theme === "light") {
+      htmlEl.classList.add("theme-light");
+      bodyEl.classList.add("theme-light");
+    } else {
+      htmlEl.classList.remove("theme-light");
+      bodyEl.classList.remove("theme-light");
+    }
+    localStorage.setItem("fusion-theme", theme);
+  }, [theme]);
+
+  const toggleTheme = () => {
+    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -958,67 +994,75 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  // --- REUSABLE OFFICIAL SOCIALS + "FOLLOW FUSION" SECTION ---
+  // --- REUSABLE OFFICIAL SOCIALS CARD (CLEAN, NO EXTRA TEXT BELOW) ---
   const renderOfficialSocialsSection = () => (
     <GlassContainer
       type="rounded"
       borderRadius={24}
       tintOpacity={0.14}
-      className="p-4 sm:p-5"
+      className="p-3.5 sm:p-4"
     >
-      <div className="space-y-4">
-        <div className="space-y-2.5">
-          {OFFICIAL_FUSION_SOCIALS.map((social) => (
-            <a
-              key={social.id}
-              href={social.url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-center justify-between gap-3 w-full rounded-2xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/10 px-3.5 py-2.5 transition active:scale-[0.98]"
-            >
-              <div className="flex items-center gap-3 min-w-0">
-                <div className="h-9 w-9 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
-                  <img
-                    src="/logo.webp"
-                    alt={social.name}
-                    className="h-full w-full object-cover"
-                  />
-                </div>
-                <div className="min-w-0">
-                  <p className="text-xs sm:text-sm font-bold text-white truncate">
-                    {social.name}
-                  </p>
-                  <p className="text-[11px] text-white/55 truncate">
-                    {social.handle}
-                  </p>
-                </div>
+      <div className="space-y-2">
+        {OFFICIAL_FUSION_SOCIALS.map((social) => (
+          <a
+            key={social.id}
+            href={social.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className={`flex items-center justify-between gap-3 w-full rounded-2xl px-3.5 py-2.5 transition active:scale-[0.98] border ${
+              isLight
+                ? "bg-[#0E2F76]/[0.04] hover:bg-[#0E2F76]/[0.08] border-[#0E2F76]/15"
+                : "bg-white/[0.04] hover:bg-white/[0.08] border-white/10"
+            }`}
+          >
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="h-9 w-9 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
+                <img
+                  src="/logo.webp"
+                  alt={social.name}
+                  className="h-full w-full object-cover"
+                />
               </div>
+              <div className="min-w-0">
+                <p
+                  className={`text-xs sm:text-sm font-bold truncate ${
+                    isLight ? "text-[#0E2F76]" : "text-white"
+                  }`}
+                >
+                  {social.name}
+                </p>
+                <p
+                  className={`text-[11px] truncate ${
+                    isLight ? "text-[#0E2F76]/65" : "text-white/55"
+                  }`}
+                >
+                  {social.handle}
+                </p>
+              </div>
+            </div>
 
-              <span className="shrink-0 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full bg-white text-black text-[11px] font-bold shadow-sm">
-                <span>{social.cta}</span>
-                <ExternalLink className="h-3 w-3" />
-              </span>
-            </a>
-          ))}
-        </div>
-
-        <div className="pt-3 border-t border-white/10 text-center sm:text-left space-y-1">
-          <h4 className="text-xs sm:text-sm font-bold text-white tracking-wide">
-            Follow Fusion
-          </h4>
-          <p className="text-[11px] sm:text-xs text-white/60 leading-relaxed">
-            Follow our official socials to discover more stunning wallpapers,
-            explore new collections, and stay updated with the latest additions.
-          </p>
-        </div>
+            <span
+              className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[11px] font-bold shadow-sm ${
+                isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black"
+              }`}
+            >
+              <span>{social.cta}</span>
+              <ExternalLink className="h-3 w-3" />
+            </span>
+          </a>
+        ))}
       </div>
     </GlassContainer>
   );
 
-  // --- REUSABLE "BUILT BY FUSION" FOOTER ---
+  // --- REUSABLE "BUILT BY FUSION" FOOTER (SHOWN ONLY ON HOME PAGE) ---
   const renderBuiltByFusionFooter = () => (
     <footer className="w-full pt-10 pb-6 text-center select-none">
-      <p className="text-[11px] sm:text-xs font-medium tracking-[0.18em] uppercase text-white/40">
+      <p
+        className={`text-[11px] sm:text-xs font-medium tracking-[0.18em] uppercase ${
+          isLight ? "text-[#0E2F76]/50" : "text-white/40"
+        }`}
+      >
         Built by Fusion
       </p>
     </footer>
@@ -1039,9 +1083,11 @@ export default function FusionWallpapersApp() {
       >
         <div
           onClick={() => openWallpaperDetail(item)}
-          className={`relative w-full overflow-hidden rounded-2xl bg-[#0a0a0a] border border-white/10 cursor-pointer active:scale-95 transition-transform duration-150 ${
-            isTall ? "aspect-[9/16]" : ""
-          }`}
+          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-95 transition-transform duration-150 border ${
+            isLight
+              ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15"
+              : "bg-[#0a0a0a] border-white/10"
+          } ${isTall ? "aspect-[9/16]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
@@ -1068,7 +1114,11 @@ export default function FusionWallpapersApp() {
         </div>
 
         <div className="mt-1 px-0.5 flex items-center justify-between">
-          <h3 className="text-[11px] font-normal text-white/90 truncate max-w-[80%] tracking-tight">
+          <h3
+            className={`text-[11px] font-normal truncate max-w-[80%] tracking-tight ${
+              isLight ? "text-[#0E2F76]" : "text-white/90"
+            }`}
+          >
             {item.title}
           </h3>
 
@@ -1078,7 +1128,11 @@ export default function FusionWallpapersApp() {
             onClick={(e) => handleToggleCardMenu(e, item)}
             className={`h-5 w-5 rounded-md flex items-center justify-center transition active:scale-90 ${
               isMenuOpen
-                ? "bg-white/20 text-white"
+                ? isLight
+                  ? "bg-[#0E2F76]/15 text-[#0E2F76]"
+                  : "bg-white/20 text-white"
+                : isLight
+                ? "text-[#0E2F76]/80 hover:bg-[#0E2F76]/10"
                 : "text-white/80 hover:bg-white/10"
             }`}
           >
@@ -1096,7 +1150,11 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      className="min-h-screen bg-[#000000] text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
+      className={`min-h-screen flex flex-col pb-24 relative overflow-x-hidden font-sans transition-colors duration-200 ${
+        isLight
+          ? "theme-light bg-[#F4FEFF] text-[#0E2F76] selection:bg-[#0E2F76] selection:text-white"
+          : "bg-[#000000] text-[#E5E4E2] selection:bg-white selection:text-black"
+      }`}
       onContextMenu={(e) => e.preventDefault()}
     >
       <LiquidGlassShaderDefs />
@@ -1116,9 +1174,11 @@ export default function FusionWallpapersApp() {
                 ? `${activeMenu.bottom}px`
                 : "auto",
             left: `${activeMenu.left}px`,
-            background: "rgba(12, 12, 16, 0.78)",
+            background: isLight
+              ? "rgba(255, 255, 255, 0.92)"
+              : "rgba(12, 12, 16, 0.78)",
           }}
-          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
+          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.65)]"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -1129,12 +1189,18 @@ export default function FusionWallpapersApp() {
               setActiveMenu(null);
               toggleSaveWallpaper(null, target);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/15 transition active:scale-95"
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
+              isLight
+                ? "text-[#0E2F76] hover:bg-[#0E2F76]/10"
+                : "text-white hover:bg-white/15"
+            }`}
           >
             <Bookmark
               className={`h-3.5 w-3.5 ${
                 savedIds.includes(activeMenu.wallpaper.id)
-                  ? "fill-white text-white"
+                  ? isLight
+                    ? "fill-[#0E2F76] text-[#0E2F76]"
+                    : "fill-white text-white"
                   : ""
               }`}
             />
@@ -1146,7 +1212,11 @@ export default function FusionWallpapersApp() {
           <button
             type="button"
             onClick={(e) => handleShareWallpaper(e, activeMenu.wallpaper)}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/15 transition active:scale-95"
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
+              isLight
+                ? "text-[#0E2F76] hover:bg-[#0E2F76]/10"
+                : "text-white hover:bg-white/15"
+            }`}
           >
             <Share2 className="h-3.5 w-3.5" />
             <span>Share</span>
@@ -1160,7 +1230,11 @@ export default function FusionWallpapersApp() {
               setActiveMenu(null);
               triggerDirectDownload(target);
             }}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-white hover:bg-white/15 transition active:scale-95"
+            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
+              isLight
+                ? "text-[#0E2F76] hover:bg-[#0E2F76]/10"
+                : "text-white hover:bg-white/15"
+            }`}
           >
             <Download className="h-3.5 w-3.5" />
             <span>Download</span>
@@ -1170,7 +1244,7 @@ export default function FusionWallpapersApp() {
             <button
               type="button"
               onClick={(e) => handleAdminDelete(e, activeMenu.wallpaper)}
-              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-300 hover:bg-red-950/60 transition border-t border-white/15 mt-0.5 pt-1.5"
+              className="w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold text-red-500 hover:bg-red-500/15 transition border-t border-white/15 mt-0.5 pt-1.5"
             >
               <Trash2 className="h-3.5 w-3.5" />
               <span>Delete</span>
@@ -1179,8 +1253,14 @@ export default function FusionWallpapersApp() {
         </GlassContainer>
       )}
 
-      {/* ================= PURE OLED BLACK STICKY HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-black/70 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
+      {/* ================= STICKY HEADER ================= */}
+      <header
+        className={`sticky top-0 z-30 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b transition-colors ${
+          isLight
+            ? "bg-[#F4FEFF]/80 border-[#0E2F76]/10"
+            : "bg-black/70 border-white/10"
+        }`}
+      >
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
@@ -1198,7 +1278,11 @@ export default function FusionWallpapersApp() {
                 className="h-full w-full object-cover"
               />
             </div>
-            <span className="text-base sm:text-lg font-black tracking-[0.22em] text-white uppercase">
+            <span
+              className={`text-base sm:text-lg font-black tracking-[0.22em] uppercase ${
+                isLight ? "text-[#0E2F76]" : "text-white"
+              }`}
+            >
               FUSION
             </span>
           </button>
@@ -1223,7 +1307,7 @@ export default function FusionWallpapersApp() {
                 onClick={() => setActiveTab("profile")}
                 className="px-3.5 py-1.5 text-xs font-semibold"
               >
-                <UserIcon className="h-3.5 w-3.5 text-white" />
+                <UserIcon className="h-3.5 w-3.5" />
                 <span className="max-w-[85px] truncate">
                   {profile?.display_name || "Shadow"}
                 </span>
@@ -1241,8 +1325,28 @@ export default function FusionWallpapersApp() {
                 }
                 className="px-4 py-1.5 text-xs font-semibold"
               >
-                <UserIcon className="h-3.5 w-3.5 text-white" />
+                <UserIcon className="h-3.5 w-3.5" />
                 <span>Sign In</span>
+              </GlassButton>
+            )}
+
+            {/* ITEM 1: CIRCULAR THEME TOGGLE BUTTON ONLY ON THE PROFILE PAGE */}
+            {activeTab === "profile" && (
+              <GlassButton
+                typeShape="circle"
+                size={34}
+                tintOpacity={0.14}
+                aria-label={
+                  isLight ? "Switch to dark theme" : "Switch to light theme"
+                }
+                onClick={toggleTheme}
+                className="shrink-0"
+              >
+                {isLight ? (
+                  <Sun className="h-4 w-4 text-[#0E2F76]" />
+                ) : (
+                  <Moon className="h-4 w-4 text-white" />
+                )}
               </GlassButton>
             )}
           </div>
@@ -1259,21 +1363,33 @@ export default function FusionWallpapersApp() {
             className="w-full h-11 px-4"
           >
             <div className="flex items-center w-full h-full">
-              <Search className="h-4 w-4 text-white/60 mr-3 shrink-0" />
+              <Search
+                className={`h-4 w-4 mr-3 shrink-0 ${
+                  isLight ? "text-[#0E2F76]/60" : "text-white/60"
+                }`}
+              />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search wallpapers, anime, moods..."
-                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder:text-white/45 focus:outline-none font-medium"
+                className={`w-full bg-transparent text-xs sm:text-sm focus:outline-none font-medium ${
+                  isLight
+                    ? "text-[#0E2F76] placeholder:text-[#0E2F76]/45"
+                    : "text-white placeholder:text-white/45"
+                }`}
               />
               {searchQuery ? (
                 <button
                   type="button"
                   aria-label="Clear search"
                   onClick={() => setSearchQuery("")}
-                  className="text-white/70 hover:text-white p-1"
+                  className={`p-1 ${
+                    isLight
+                      ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
+                      : "text-white/70 hover:text-white"
+                  }`}
                 >
                   <X className="h-4 w-4" />
                 </button>
@@ -1310,7 +1426,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= CONTENT AREA ================= */}
       {activeTab === "profile" ? (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-2 pb-6 z-10 flex flex-col justify-between">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-8 z-10">
           {user ? (
             <div className="space-y-6">
               <div className="max-w-md mx-auto space-y-3">
@@ -1322,23 +1438,43 @@ export default function FusionWallpapersApp() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="h-11 w-11 rounded-full bg-white/10 border border-white/20 flex items-center justify-center text-base font-bold text-white uppercase shrink-0">
+                      <div
+                        className={`h-11 w-11 rounded-full border flex items-center justify-center text-base font-bold uppercase shrink-0 ${
+                          isLight
+                            ? "bg-[#0E2F76]/10 border-[#0E2F76]/20 text-[#0E2F76]"
+                            : "bg-white/10 border-white/20 text-white"
+                        }`}
+                      >
                         {(profile?.display_name || user.email || "U")[0]}
                       </div>
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
-                          <h2 className="text-sm sm:text-base font-bold text-white truncate">
+                          <h2
+                            className={`text-sm sm:text-base font-bold truncate ${
+                              isLight ? "text-[#0E2F76]" : "text-white"
+                            }`}
+                          >
                             {profile?.display_name || "Shadow"}
                           </h2>
                           {isAdmin && (
-                            <span className="text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full bg-white/15 text-white border border-white/25">
+                            <span
+                              className={`text-[8px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${
+                                isLight
+                                  ? "bg-[#0E2F76]/10 text-[#0E2F76] border-[#0E2F76]/25"
+                                  : "bg-white/15 text-white border-white/25"
+                              }`}
+                            >
                               Admin
                             </span>
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[11px] text-white/60">
+                        <div
+                          className={`flex items-center gap-1.5 text-[11px] ${
+                            isLight ? "text-[#0E2F76]/65" : "text-white/60"
+                          }`}
+                        >
                           <span className="truncate">
                             {revealFullEmail
                               ? user.email
@@ -1347,7 +1483,7 @@ export default function FusionWallpapersApp() {
                           <button
                             type="button"
                             onClick={() => setRevealFullEmail(!revealFullEmail)}
-                            className="text-white hover:text-white/80 p-0.5 transition"
+                            className="p-0.5 transition opacity-80 hover:opacity-100"
                           >
                             {revealFullEmail ? (
                               <EyeOff className="h-3 w-3" />
@@ -1379,7 +1515,7 @@ export default function FusionWallpapersApp() {
                       <GlassButton
                         typeShape="pill"
                         onClick={handleSignOut}
-                        className="h-8 px-3 text-[11px] font-semibold text-red-200"
+                        className="h-8 px-3 text-[11px] font-semibold text-red-400"
                       >
                         <LogOut className="h-3 w-3" />
                       </GlassButton>
@@ -1387,17 +1523,25 @@ export default function FusionWallpapersApp() {
                   </div>
                 </GlassContainer>
 
-                {/* Official Socials + Follow Fusion Description */}
+                {/* ITEM 2: Official Socials Card Only (Removed extra "Follow Fusion" heading & description) */}
                 {renderOfficialSocialsSection()}
               </div>
 
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white tracking-wide">
+              <div className="space-y-3 pt-1">
+                <div className="flex items-baseline justify-between px-0.5">
+                  <h3
+                    className={`text-base sm:text-lg font-bold tracking-tight ${
+                      isLight ? "text-[#0E2F76]" : "text-white"
+                    }`}
+                  >
                     My Saved Wallpapers
                   </h3>
-                  <span className="text-xs text-white/60 font-medium">
-                    {savedWallpapersList.length} items
+                  <span
+                    className={`text-xs font-medium ${
+                      isLight ? "text-[#0E2F76]/60" : "text-white/55"
+                    }`}
+                  >
+                    {savedWallpapersList.length} saved
                   </span>
                 </div>
                 {savedWallpapersList.length === 0 ? (
@@ -1406,11 +1550,11 @@ export default function FusionWallpapersApp() {
                     borderRadius={28}
                     className="p-10 text-center max-w-md mx-auto my-4"
                   >
-                    <Bookmark className="h-8 w-8 text-white mx-auto mb-2 opacity-70" />
-                    <p className="text-sm font-semibold text-white">
+                    <Bookmark className="h-8 w-8 mx-auto mb-2 opacity-70" />
+                    <p className="text-sm font-semibold">
                       You haven&apos;t saved any wallpapers yet.
                     </p>
-                    <p className="text-xs text-white/60 mt-1 mb-4">
+                    <p className="text-xs opacity-60 mt-1 mb-4">
                       Tap the 3-dot menu on any wallpaper to save it.
                     </p>
                     <GlassButton
@@ -1445,10 +1589,8 @@ export default function FusionWallpapersApp() {
                     className="h-full w-full object-cover"
                   />
                 </div>
-                <h2 className="text-base font-bold text-white">
-                  Your Fusion Account
-                </h2>
-                <p className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                <h2 className="text-base font-bold">Your Fusion Account</h2>
+                <p className="text-xs opacity-65 mt-1.5 leading-relaxed">
                   Sign in or create a free account to download high-resolution
                   wallpapers and sync your collection.
                 </p>
@@ -1483,20 +1625,18 @@ export default function FusionWallpapersApp() {
                 </div>
               </GlassContainer>
 
-              {/* Official Socials + Follow Fusion Description */}
+              {/* ITEM 2: Official Socials Card Only */}
               {renderOfficialSocialsSection()}
             </div>
           )}
-
-          {renderBuiltByFusionFooter()}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-6 flex flex-col justify-between">
+        <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-8">
           {exploreView === "grid" ? (
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2">
-                <Compass className="h-4 w-4 text-white" />
-                <h2 className="text-base font-bold text-white tracking-wide">
+                <Compass className="h-4 w-4" />
+                <h2 className="text-base font-bold tracking-wide">
                   Explore Anime
                 </h2>
               </div>
@@ -1553,7 +1693,7 @@ export default function FusionWallpapersApp() {
                 <span>Back to Explore</span>
               </GlassButton>
 
-              <h2 className="text-lg font-bold text-white tracking-wide">
+              <h2 className="text-lg font-bold tracking-wide">
                 {animeCategories.find((c) => c.id === selectedExploreCategory)
                   ?.name || "Category"}
               </h2>
@@ -1564,11 +1704,9 @@ export default function FusionWallpapersApp() {
                   borderRadius={28}
                   className="p-10 text-center max-w-md mx-auto my-6"
                 >
-                  <ImageIcon className="h-8 w-8 text-white mx-auto mb-2 opacity-70" />
-                  <h3 className="text-sm font-semibold text-white">
-                    No Wallpapers Yet
-                  </h3>
-                  <p className="text-xs text-white/60 mt-1">
+                  <ImageIcon className="h-8 w-8 mx-auto mb-2 opacity-70" />
+                  <h3 className="text-sm font-semibold">No Wallpapers Yet</h3>
+                  <p className="text-xs opacity-60 mt-1">
                     Admin hasn&apos;t uploaded any wallpapers for this category.
                   </p>
                 </GlassContainer>
@@ -1579,8 +1717,6 @@ export default function FusionWallpapersApp() {
               )}
             </div>
           )}
-
-          {renderBuiltByFusionFooter()}
         </main>
       ) : (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-6 flex flex-col justify-between">
@@ -1662,8 +1798,8 @@ export default function FusionWallpapersApp() {
                   {/* Top 10 Today Ranking System */}
                   <div className="space-y-3">
                     <div className="flex items-center gap-2">
-                      <Flame className="h-5 w-5 text-white" />
-                      <h3 className="text-lg font-black text-white tracking-wide">
+                      <Flame className="h-5 w-5" />
+                      <h3 className="text-lg font-black tracking-wide">
                         Top 10 Today
                       </h3>
                     </div>
@@ -1675,7 +1811,13 @@ export default function FusionWallpapersApp() {
                           onClick={() => openWallpaperDetail(rankedItem)}
                           className="group relative flex items-end shrink-0 cursor-pointer select-none"
                         >
-                          <span className="text-[105px] leading-none font-black text-transparent [-webkit-text-stroke:2.5px_rgba(255,255,255,0.3)] group-hover:[-webkit-text-stroke:2.5px_rgba(255,255,255,0.8)] transition-all -mr-5 z-0 pointer-events-none">
+                          <span
+                            className={`text-[105px] leading-none font-black text-transparent transition-all -mr-5 z-0 pointer-events-none ${
+                              isLight
+                                ? "[-webkit-text-stroke:2.5px_rgba(14,47,118,0.28)] group-hover:[-webkit-text-stroke:2.5px_rgba(14,47,118,0.75)]"
+                                : "[-webkit-text-stroke:2.5px_rgba(255,255,255,0.3)] group-hover:[-webkit-text-stroke:2.5px_rgba(255,255,255,0.8)]"
+                            }`}
+                          >
                             {rankIdx + 1}
                           </span>
                           <div className="relative z-10 w-32 h-48 rounded-2xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-xl group-hover:scale-105 group-hover:border-white/40 transition-all duration-300">
@@ -1698,11 +1840,23 @@ export default function FusionWallpapersApp() {
                 </div>
               )}
 
+            {/* ITEM 3: CLEAN, WELL-SPACED SAVED WALLPAPERS HEADING & COUNT */}
             {activeTab === "saved" && (
-              <div className="mb-3 flex items-center justify-between">
-                <h2 className="text-xs font-bold text-white tracking-wide uppercase">
-                  Saved Wallpapers ({filteredWallpapers.length})
-                </h2>
+              <div className="pt-4 pb-4 px-0.5 flex items-baseline justify-between">
+                <h1
+                  className={`text-lg sm:text-xl font-bold tracking-tight ${
+                    isLight ? "text-[#0E2F76]" : "text-white"
+                  }`}
+                >
+                  Saved Wallpapers
+                </h1>
+                <span
+                  className={`text-xs sm:text-sm font-medium ${
+                    isLight ? "text-[#0E2F76]/60" : "text-white/55"
+                  }`}
+                >
+                  {filteredWallpapers.length} saved
+                </span>
               </div>
             )}
 
@@ -1723,10 +1877,8 @@ export default function FusionWallpapersApp() {
                 className="p-6 text-center max-w-md mx-auto my-6"
               >
                 <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
-                <h3 className="text-sm font-bold text-white">
-                  Connection Error
-                </h3>
-                <p className="text-xs text-white/70 mt-1 mb-3">{fetchError}</p>
+                <h3 className="text-sm font-bold">Connection Error</h3>
+                <p className="text-xs opacity-70 mt-1 mb-3">{fetchError}</p>
                 <GlassButton
                   typeShape="pill"
                   activeWhite={true}
@@ -1743,12 +1895,12 @@ export default function FusionWallpapersApp() {
                 borderRadius={28}
                 className="p-10 text-center max-w-md mx-auto my-6"
               >
-                <h3 className="text-sm font-semibold text-white">
+                <h3 className="text-sm font-semibold">
                   {activeTab === "saved"
                     ? "You haven't saved any wallpapers yet."
                     : "No Wallpapers Found"}
                 </h3>
-                <p className="text-xs text-white/60 mt-1">
+                <p className="text-xs opacity-60 mt-1">
                   {activeTab === "saved"
                     ? "Tap the 3-dot menu on any wallpaper to save it."
                     : "Try clearing your search or filter."}
@@ -1761,7 +1913,8 @@ export default function FusionWallpapersApp() {
             )}
           </div>
 
-          {renderBuiltByFusionFooter()}
+          {/* ITEM 4: SHOW "BUILT BY FUSION" ONLY ON THE HOME PAGE (NOT ON SAVED OR SEARCH) */}
+          {activeTab === "home" && !searchQuery && renderBuiltByFusionFooter()}
         </main>
       )}
 
@@ -1788,6 +1941,8 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "home"
                   ? "glass-active-white font-bold"
+                  : isLight
+                  ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
                   : "text-white/70 hover:text-white"
               }`}
             >
@@ -1806,6 +1961,8 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "explore"
                   ? "glass-active-white font-bold"
+                  : isLight
+                  ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
                   : "text-white/70 hover:text-white"
               }`}
             >
@@ -1831,12 +1988,18 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "saved"
                   ? "glass-active-white font-bold"
+                  : isLight
+                  ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
                   : "text-white/70 hover:text-white"
               }`}
             >
               <Bookmark
                 className={`h-4 w-4 ${
-                  activeTab === "saved" ? "fill-black" : ""
+                  activeTab === "saved"
+                    ? isLight
+                      ? "fill-white"
+                      : "fill-black"
+                    : ""
                 }`}
               />
               <span className="text-[9px] font-bold tracking-wide">Saved</span>
@@ -1851,6 +2014,8 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "profile"
                   ? "glass-active-white font-bold"
+                  : isLight
+                  ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
                   : "text-white/70 hover:text-white"
               }`}
             >
@@ -1863,14 +2028,16 @@ export default function FusionWallpapersApp() {
         </GlassContainer>
       </nav>
 
-      {/* ================= PURE OLED BLACK WALLPAPER DETAIL SCREEN ================= */}
+      {/* ================= WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
           role="dialog"
           aria-modal="true"
           aria-label={selectedWallpaper.title}
-          className="fixed inset-0 z-50 bg-[#000000] overflow-y-auto animate-in fade-in duration-150"
+          className={`fixed inset-0 z-50 overflow-y-auto animate-in fade-in duration-150 ${
+            isLight ? "bg-[#F4FEFF]" : "bg-[#000000]"
+          }`}
         >
           <div className="relative z-10 max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
             <div className="w-full flex items-center justify-between mb-2.5">
@@ -1881,14 +2048,14 @@ export default function FusionWallpapersApp() {
                 aria-label="Go back"
                 onClick={closeWallpaperDetail}
               >
-                <ChevronLeft className="h-5 w-5 text-white" />
+                <ChevronLeft className="h-5 w-5" />
               </GlassButton>
 
               <div className="text-center px-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                <h1 className="text-base sm:text-lg font-bold tracking-wide">
                   {selectedWallpaper.title}
                 </h1>
-                <p className="text-[11px] text-white/60 capitalize">
+                <p className="text-[11px] opacity-60 capitalize">
                   {selectedWallpaper.category
                     ? animeCategories.find(
                         (c) => c.id === selectedWallpaper.category
@@ -1904,7 +2071,7 @@ export default function FusionWallpapersApp() {
                 aria-label="Share wallpaper"
                 onClick={(e) => handleShareWallpaper(e, selectedWallpaper)}
               >
-                <Share2 className="h-4 w-4 text-white" />
+                <Share2 className="h-4 w-4" />
               </GlassButton>
             </div>
 
@@ -1964,9 +2131,9 @@ export default function FusionWallpapersApp() {
                   className="absolute top-3 left-3 z-20"
                 >
                   {isExpanded ? (
-                    <Minimize2 className="h-4 w-4 text-white" />
+                    <Minimize2 className="h-4 w-4" />
                   ) : (
-                    <Maximize2 className="h-4 w-4 text-white" />
+                    <Maximize2 className="h-4 w-4" />
                   )}
                 </GlassButton>
               )}
@@ -1985,7 +2152,9 @@ export default function FusionWallpapersApp() {
                 <Bookmark
                   className={`h-4 w-4 ${
                     savedIds.includes(selectedWallpaper.id)
-                      ? "fill-black text-black"
+                      ? isLight
+                        ? "fill-white text-white"
+                        : "fill-black text-black"
                       : ""
                   }`}
                 />
@@ -2043,11 +2212,11 @@ export default function FusionWallpapersApp() {
 
             {/* RELATED WALLPAPERS SECTION */}
             <div className="w-full pt-3 border-t border-white/10">
-              <h3 className="text-sm font-bold text-white tracking-wide mb-3">
+              <h3 className="text-sm font-bold tracking-wide mb-3">
                 Related wallpapers
               </h3>
               {relatedWallpapers.length === 0 ? (
-                <p className="text-xs text-white/50">
+                <p className="text-xs opacity-50">
                   More wallpapers coming soon.
                 </p>
               ) : (
@@ -2073,8 +2242,6 @@ export default function FusionWallpapersApp() {
                 </>
               )}
             </div>
-
-            {renderBuiltByFusionFooter()}
           </div>
         </div>
       )}
