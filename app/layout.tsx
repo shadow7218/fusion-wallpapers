@@ -20,7 +20,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
-  themeColor: "#090a0f",
+  themeColor: "#000000",
 };
 
 export default function RootLayout({
@@ -29,13 +29,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className="bg-[#000000]">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/logo.webp" type="image/webp" />
         <link rel="apple-touch-icon" href="/logo.webp" />
       </head>
-      <body className="bg-[#08090c] text-[#E5E4E2] antialiased min-h-screen relative">
+      <body className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative">
         {children}
       </body>
     </html>
