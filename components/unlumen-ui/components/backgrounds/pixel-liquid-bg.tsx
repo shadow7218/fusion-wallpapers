@@ -4,13 +4,6 @@ import React, { useEffect, useRef } from "react";
 
 export interface PixelLiquidBgProps {
   className?: string;
-  /**
-   * 4-stop color palette for dark/OLED mode:
-   * [0] = Pure OLED Black base (#000000)
-   * [1] = Deep shadow accent
-   * [2] = Mid liquid glow
-   * [3] = Bright core highlight
-   */
   darkPalette?: [string, string, string, string] | string[];
   lightPalette?: [string, string, string, string] | string[];
   pixelSize?: number;
@@ -40,11 +33,10 @@ function hexToRgbNormalized(hex: string): [number, number, number] {
 
 export function PixelLiquidBg({
   className = "",
-  // Default matches the OLED black + crimson/magenta fluid glow from ui.unlumen.com
-  darkPalette = ["#000000", "#16000c", "#b8004c", "#ff2a7a"],
+  darkPalette = ["#000000", "#1f0010", "#c80050", "#ff2a7a"],
   lightPalette = ["#ffffff", "#e8d5ff", "#aa55ff", "#7700ff"],
   pixelSize = 3,
-  resolution = 0.45,
+  resolution = 0.4,
   mouseForce = 8,
   theme = "dark",
   children,
@@ -60,7 +52,7 @@ export function PixelLiquidBg({
       depth: false,
       stencil: false,
       antialias: false,
-      powerPreference: "low-power",
+      powerPreference: "default",
     });
 
     if (!gl) return;
@@ -74,9 +66,14 @@ export function PixelLiquidBg({
       }
     `;
 
-    // Navier-Stokes inspired curl-advection + Pixelation + 4x4 Bayer Dithering + Film Grain
+    // Uses highp float so mobile GPUs never overflow sin() hash calculations
     const fragmentShaderSource = `
+      #ifdef GL_FRAGMENT_PRECISION_HIGH
+      precision highp float;
+      #else
       precision mediump float;
+      #endif
+
       varying vec2 v_uv;
       uniform vec2 u_res;
       uniform float u_time;
@@ -90,7 +87,9 @@ export function PixelLiquidBg({
       uniform vec3 u_c3;
 
       float hash(vec2 p) {
-        return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
+        p = fract(p * vec2(123.34, 456.21));
+        p += dot(p, p + 45.32);
+        return fract(p.x * p.y);
       }
 
       float noise(vec2 p) {
@@ -104,18 +103,16 @@ export function PixelLiquidBg({
         );
       }
 
-      // 2-octave FBM for fast 60fps mobile fluid advection
       float fbm(vec2 p) {
         float v = 0.0;
         v += 0.55 * noise(p);
-        p = p * 2.03 + vec2(1.7, 9.2);
-        v += 0.28 * noise(p);
+        p = p * 2.02 + vec2(1.7, 9.2);
+        v += 0.30 * noise(p);
         p = p * 2.01 + vec2(8.3, 2.8);
-        v += 0.17 * noise(p);
+        v += 0.15 * noise(p);
         return v;
       }
 
-      // 4x4 Bayer Matrix Dithering (WebGL 1 compatible)
       float bayer4x4(vec2 pos) {
         vec2 p = floor(mod(pos, 4.0));
         int idx = int(p.x) + int(p.y) * 4;
@@ -138,7 +135,6 @@ export function PixelLiquidBg({
       }
 
       void main() {
-        // 1. Pixelation grid
         float px = max(1.0, u_pixelSize);
         vec2 fragCoord = v_uv * u_res;
         vec2 cellCoord = floor(fragCoord / px);
@@ -148,56 +144,55 @@ export function PixelLiquidBg({
         float aspect = u_res.x / max(1.0, u_res.y);
         vec2 p = (uv - 0.5) * vec2(aspect, 1.0);
 
-        float t = u_time * 0.22;
+        float t = u_time * 0.28;
 
-        // 2. Auto-demo fluid emitters + interactive cursor/touch splat
-        vec2 autoEmitter1 = vec2(sin(t * 1.1) * 0.28 * aspect, cos(t * 0.85) * 0.28);
-        vec2 autoEmitter2 = vec2(cos(t * 0.75) * 0.22 * aspect, sin(t * 1.25) * 0.32);
+        // Auto-demo swirling liquid streams + interactive pointer force
+        vec2 emitter1 = vec2(sin(t * 0.9) * 0.25 * aspect, cos(t * 0.7) * 0.3);
+        vec2 emitter2 = vec2(cos(t * 0.65) * 0.22 * aspect, sin(t * 1.05) * 0.32);
+        vec2 emitter3 = vec2(sin(t * 0.5 + 2.0) * 0.18 * aspect, cos(t * 0.9 + 1.2) * 0.22);
         vec2 ptr = (u_pointer - 0.5) * vec2(aspect, 1.0);
 
         float dPtr = length(p - ptr);
-        vec2 ptrWarp = u_pointerVel * exp(-dPtr * (4.2 - min(3.0, u_mouseForce * 0.25))) * (u_mouseForce * 0.14);
+        vec2 ptrWarp = u_pointerVel * exp(-dPtr * 3.0) * (u_mouseForce * 0.16);
 
-        // 3. Domain-warped fluid velocity field
         vec2 q = vec2(
-          fbm(p * 2.1 + vec2(0.0, t * 0.9)),
-          fbm(p * 2.1 + vec2(5.2, -t * 0.8))
+          fbm(p * 2.2 + vec2(0.0, t * 0.85)),
+          fbm(p * 2.2 + vec2(5.2, -t * 0.75))
         );
 
         vec2 r = vec2(
-          fbm(p * 2.3 + 2.4 * q + vec2(1.7, 9.2) + 0.45 * t + ptrWarp),
-          fbm(p * 2.3 + 2.4 * q + vec2(8.3, 2.8) - 0.38 * t - ptrWarp)
+          fbm(p * 2.5 + 2.5 * q + vec2(1.7, 9.2) + 0.45 * t + ptrWarp),
+          fbm(p * 2.5 + 2.5 * q + vec2(8.3, 2.8) - 0.4 * t - ptrWarp)
         );
 
-        float fluidField = fbm(p * 1.85 + 2.2 * r);
+        float fluidField = fbm(p * 1.9 + 2.4 * r);
 
-        // 4. Concentrated liquid plumes so ~75% of screen stays pure OLED #000000
-        float plume1 = exp(-length(p - autoEmitter1 + (r - 0.5) * 0.55) * 2.65);
-        float plume2 = exp(-length(p - autoEmitter2 - (q - 0.5) * 0.5) * 2.85);
-        float ptrPlume = exp(-dPtr * 3.1) * 0.75;
+        // Liquid ribbons over pure OLED #000000 background
+        float plume1 = exp(-length(p - emitter1 + (r - 0.5) * 0.65) * 2.1);
+        float plume2 = exp(-length(p - emitter2 - (q - 0.5) * 0.6) * 2.25);
+        float plume3 = exp(-length(p - emitter3 + (q - r) * 0.45) * 2.4);
+        float ptrPlume = exp(-dPtr * 2.6) * 0.85;
 
         float density = clamp(
-          fluidField * (plume1 * 1.35 + plume2 * 1.15 + ptrPlume),
+          fluidField * (plume1 * 1.45 + plume2 * 1.3 + plume3 * 1.15 + ptrPlume),
           0.0,
           1.0
         );
 
-        // Sharpen dark cutoff for true OLED black
-        density = smoothstep(0.18, 0.86, density);
+        // Keep deep OLED black in empty regions while making liquid plumes pop
+        density = smoothstep(0.14, 0.78, density);
 
-        // 5. Bayer dithering + subtle film grain
-        float bayer = (bayer4x4(cellCoord) - 0.5) * 0.075;
-        float grain = (hash(uv * u_res + fract(u_time)) - 0.5) * 0.025;
+        float bayer = (bayer4x4(cellCoord) - 0.5) * 0.085;
+        float grain = (hash(cellCoord + fract(u_time)) - 0.5) * 0.03;
         float d = clamp(density + bayer + grain, 0.0, 1.0);
 
-        // 6. 4-stop palette interpolation
         vec3 col = u_c0;
-        if (d < 0.35) {
-          col = mix(u_c0, u_c1, smoothstep(0.04, 0.35, d));
-        } else if (d < 0.72) {
-          col = mix(u_c1, u_c2, (d - 0.35) / 0.37);
+        if (d < 0.30) {
+          col = mix(u_c0, u_c1, smoothstep(0.02, 0.30, d));
+        } else if (d < 0.68) {
+          col = mix(u_c1, u_c2, (d - 0.30) / 0.38);
         } else {
-          col = mix(u_c2, u_c3, (d - 0.72) / 0.28);
+          col = mix(u_c2, u_c3, (d - 0.68) / 0.32);
         }
 
         gl_FragColor = vec4(col, 1.0);
@@ -253,8 +248,8 @@ export function PixelLiquidBg({
 
     const activePalette = theme === "light" ? lightPalette : darkPalette;
     const c0 = hexToRgbNormalized(activePalette[0] || "#000000");
-    const c1 = hexToRgbNormalized(activePalette[1] || "#16000c");
-    const c2 = hexToRgbNormalized(activePalette[2] || "#b8004c");
+    const c1 = hexToRgbNormalized(activePalette[1] || "#1f0010");
+    const c2 = hexToRgbNormalized(activePalette[2] || "#c80050");
     const c3 = hexToRgbNormalized(activePalette[3] || "#ff2a7a");
 
     gl.uniform3fv(uC0, c0);
@@ -263,17 +258,15 @@ export function PixelLiquidBg({
     gl.uniform3fv(uC3, c3);
     gl.uniform1f(uMouseForce, mouseForce);
 
-    let width = 0;
-    let height = 0;
     const updateSize = () => {
       const scale = Math.max(0.2, Math.min(1.0, resolution));
-      width = Math.max(1, Math.floor(window.innerWidth * scale));
-      height = Math.max(1, Math.floor(window.innerHeight * scale));
+      const width = Math.max(1, Math.floor(window.innerWidth * scale));
+      const height = Math.max(1, Math.floor(window.innerHeight * scale));
       canvas.width = width;
       canvas.height = height;
       gl.viewport(0, 0, width, height);
       gl.uniform2f(uRes, width, height);
-      gl.uniform1f(uPixelSize, Math.max(1, pixelSize * scale));
+      gl.uniform1f(uPixelSize, Math.max(1.0, pixelSize * scale));
     };
 
     updateSize();
@@ -335,14 +328,14 @@ export function PixelLiquidBg({
   }, [darkPalette, lightPalette, pixelSize, resolution, mouseForce, theme]);
 
   return (
-    <div className={`relative bg-[#000000] overflow-hidden ${className}`}>
+    <>
       <canvas
         ref={canvasRef}
         aria-hidden="true"
-        className="pointer-events-none fixed inset-0 w-full h-full z-0 block"
+        className={`pointer-events-none fixed inset-0 w-screen h-screen z-0 block ${className}`}
         style={{ imageRendering: "pixelated" }}
       />
       {children ? <div className="relative z-10 h-full">{children}</div> : null}
-    </div>
+    </>
   );
 }
