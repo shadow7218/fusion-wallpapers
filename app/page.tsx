@@ -1107,7 +1107,7 @@ export default function FusionWallpapersApp() {
       )}
 
       {/* ================= LIQUID GLASS HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-[#070707]/80 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
+      <header className="sticky top-0 z-30 bg-black/45 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
