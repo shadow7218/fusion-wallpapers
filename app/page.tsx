@@ -1022,7 +1022,7 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      className="min-h-screen bg-[#070707] text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
+      className="min-h-screen bg-transparent text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
       onContextMenu={(e) => e.preventDefault()}
     >
       <LiquidGlassShaderDefs />
