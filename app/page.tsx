@@ -197,8 +197,9 @@ export default function FusionWallpapersApp() {
   const [editSetAsBanner, setEditSetAsBanner] = useState<boolean>(false);
   const [editingWallpaper, setEditingWallpaper] = useState<boolean>(false);
 
-  // PC Hero Banner Carousel Index State
+  // PC Hero Banner & Music-App Ambient Background Index
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
+  const [ambientBgIndex, setAmbientBgIndex] = useState<number>(0);
 
   const isAdmin = user?.id === ADMIN_UUID;
 
@@ -247,12 +248,13 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
-  // Auto-scrolling PC Hero Banner timer
+  // Auto-scrolling PC Hero Banner + Dynamic Ambient Artwork Background rotation
   useEffect(() => {
     if (wallpapers.length === 0) return;
     const timer = setInterval(() => {
       setPcHeroIndex((prev) => (prev + 1) % Math.min(wallpapers.length, 5));
-    }, 5000);
+      setAmbientBgIndex((prev) => (prev + 1) % Math.min(wallpapers.length, 8));
+    }, 6000);
     return () => clearInterval(timer);
   }, [wallpapers]);
 
@@ -896,7 +898,7 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
-  // Daily Top 10 Ranking System (rotates daily + ranks up to 10 wallpapers)
+  // Daily Top 10 Ranking System
   const topTenDailyWallpapers = useMemo(() => {
     if (wallpapers.length === 0) return [];
     const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
@@ -912,6 +914,19 @@ export default function FusionWallpapersApp() {
     scored.sort((a, b) => b.dailyScore - a.dailyScore);
     return scored.slice(0, 10).map((s) => s.wallpaper);
   }, [wallpapers]);
+
+  // Active artwork URL for the Music-App Style Moving Background
+  const activeAmbientImageUrl = useMemo(() => {
+    if (selectedWallpaper) return selectedWallpaper.image_url;
+    if (filteredWallpapers.length > 0) {
+      return filteredWallpapers[ambientBgIndex % filteredWallpapers.length]
+        .image_url;
+    }
+    if (wallpapers.length > 0) {
+      return wallpapers[ambientBgIndex % wallpapers.length].image_url;
+    }
+    return "/logo.webp";
+  }, [selectedWallpaper, filteredWallpapers, wallpapers, ambientBgIndex]);
 
   const handleToggleCardMenu = (
     e: React.MouseEvent<HTMLButtonElement>,
@@ -965,7 +980,7 @@ export default function FusionWallpapersApp() {
       >
         <div
           onClick={() => openWallpaperDetail(item)}
-          className={`relative w-full overflow-hidden rounded-2xl bg-white/5 border border-white/10 cursor-pointer active:scale-95 transition-transform duration-150 ${
+          className={`relative w-full overflow-hidden rounded-2xl bg-white/5 border border-white/15 cursor-pointer active:scale-95 transition-transform duration-150 shadow-lg ${
             isTall ? "aspect-[9/16]" : ""
           }`}
           onContextMenu={(e) => e.preventDefault()}
@@ -994,7 +1009,7 @@ export default function FusionWallpapersApp() {
         </div>
 
         <div className="mt-1 px-0.5 flex items-center justify-between">
-          <h3 className="text-[11px] font-normal text-white/90 truncate max-w-[80%] tracking-tight">
+          <h3 className="text-[11px] font-normal text-white/95 drop-shadow-sm truncate max-w-[80%] tracking-tight">
             {item.title}
           </h3>
 
@@ -1005,7 +1020,7 @@ export default function FusionWallpapersApp() {
             className={`h-5 w-5 rounded-md flex items-center justify-center transition active:scale-90 ${
               isMenuOpen
                 ? "bg-white/20 text-white"
-                : "text-white/80 hover:bg-white/10"
+                : "text-white/85 hover:bg-white/10"
             }`}
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
@@ -1022,10 +1037,33 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-  className="min-h-screen bg-transparent text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
-  onContextMenu={(e) => e.preventDefault()}
+      className="min-h-screen bg-transparent text-[#E5E4E2] flex flex-col pb-24 relative overflow-x-hidden selection:bg-white selection:text-black font-sans"
+      onContextMenu={(e) => e.preventDefault()}
     >
       <LiquidGlassShaderDefs />
+
+      {/* ================= MUSIC-PLAYER STYLE DYNAMIC MOVING AMBIENT BACKGROUND ================= */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none fixed inset-0 z-0 overflow-hidden bg-[#08090c]"
+      >
+        {/* Primary Floating Color Orb */}
+        <img
+          key={`ambient-1-${activeAmbientImageUrl}`}
+          src={activeAmbientImageUrl}
+          alt=""
+          className="absolute -top-[15%] -left-[15%] w-[130%] h-[130%] object-cover blur-[90px] saturate-[1.9] brightness-[0.65] opacity-85 animate-ambient-1 transition-all duration-1000 select-none"
+        />
+        {/* Secondary Counter-Rotating Color Orb */}
+        <img
+          key={`ambient-2-${activeAmbientImageUrl}`}
+          src={activeAmbientImageUrl}
+          alt=""
+          className="absolute -bottom-[15%] -right-[15%] w-[130%] h-[130%] object-cover blur-[110px] saturate-[2.1] brightness-[0.55] opacity-75 animate-ambient-2 transition-all duration-1000 select-none"
+        />
+        {/* Smooth Ambient Vignette Veil (Just like Apple Music / Spotify Now Playing) */}
+        <div className="absolute inset-0 bg-gradient-to-b from-black/30 via-black/45 to-black/75 backdrop-blur-[30px]" />
+      </div>
 
       {/* ================= SMART SCREEN-AWARE 3-DOT MENU ================= */}
       {activeMenu && (
@@ -1043,7 +1081,7 @@ export default function FusionWallpapersApp() {
                 : "auto",
             left: `${activeMenu.left}px`,
             background:
-              "linear-gradient(145deg, rgba(14, 18, 28, 0.92) 0%, rgba(6, 8, 14, 0.96) 100%)",
+              "linear-gradient(145deg, rgba(16, 20, 30, 0.88) 0%, rgba(8, 10, 16, 0.94) 100%)",
           }}
           className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.9)]"
           onClick={(e) => e.stopPropagation()}
@@ -1107,7 +1145,7 @@ export default function FusionWallpapersApp() {
       )}
 
       {/* ================= LIQUID GLASS HEADER ================= */}
-      <header className="sticky top-0 z-30 bg-black/40 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
+      <header className="sticky top-0 z-30 bg-black/25 backdrop-blur-xl px-4 pt-3 pb-2.5 border-b border-white/10">
         <div className="max-w-5xl mx-auto flex items-center justify-between">
           <button
             type="button"
@@ -1186,14 +1224,14 @@ export default function FusionWallpapersApp() {
             className="w-full h-11 px-4 flex items-center"
           >
             <div className="flex items-center w-full h-full">
-              <Search className="h-4 w-4 text-white/60 mr-3 shrink-0" />
+              <Search className="h-4 w-4 text-white/70 mr-3 shrink-0" />
               <input
                 ref={searchInputRef}
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search wallpapers, anime, moods..."
-                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder:text-white/45 focus:outline-none font-medium"
+                className="w-full bg-transparent text-xs sm:text-sm text-white placeholder:text-white/55 focus:outline-none font-medium"
               />
               {searchQuery ? (
                 <button
@@ -1266,7 +1304,7 @@ export default function FusionWallpapersApp() {
                           )}
                         </div>
 
-                        <div className="flex items-center gap-1.5 text-[11px] text-white/60">
+                        <div className="flex items-center gap-1.5 text-[11px] text-white/70">
                           <span className="truncate">
                             {revealFullEmail
                               ? user.email
@@ -1340,7 +1378,7 @@ export default function FusionWallpapersApp() {
                         <p className="text-xs font-bold text-white leading-tight">
                           Fusion Official Socials
                         </p>
-                        <p className="text-[10px] text-white/55">
+                        <p className="text-[10px] text-white/65">
                           fusion-bio.vercel.app
                         </p>
                       </div>
@@ -1358,7 +1396,7 @@ export default function FusionWallpapersApp() {
                   <h3 className="text-sm font-bold text-white tracking-wide">
                     My Saved Wallpapers
                   </h3>
-                  <span className="text-xs text-white/60 font-medium">
+                  <span className="text-xs text-white/70 font-medium">
                     {savedWallpapersList.length} items
                   </span>
                 </div>
@@ -1372,7 +1410,7 @@ export default function FusionWallpapersApp() {
                     <p className="text-sm font-semibold text-white">
                       You haven&apos;t saved any wallpapers yet.
                     </p>
-                    <p className="text-xs text-white/60 mt-1 mb-4">
+                    <p className="text-xs text-white/70 mt-1 mb-4">
                       Tap the 3-dot menu on any wallpaper to save it.
                     </p>
                     <GlassButton
@@ -1410,7 +1448,7 @@ export default function FusionWallpapersApp() {
                 <h2 className="text-base font-bold text-white">
                   Your Fusion Account
                 </h2>
-                <p className="text-xs text-white/60 mt-1.5 leading-relaxed">
+                <p className="text-xs text-white/70 mt-1.5 leading-relaxed">
                   Sign in or create a free account to download high-resolution
                   wallpapers and sync your collection.
                 </p>
@@ -1445,7 +1483,7 @@ export default function FusionWallpapersApp() {
                 </div>
               </GlassContainer>
 
-              {/* COMPACT SOCIAL LINK BLOCK FOR GUEST USERS (https://fusion-bio.vercel.app/) */}
+              {/* COMPACT SOCIAL LINK BLOCK FOR GUEST USERS */}
               <a
                 href="https://fusion-bio.vercel.app/"
                 target="_blank"
@@ -1470,7 +1508,7 @@ export default function FusionWallpapersApp() {
                       <p className="text-xs font-bold text-white leading-tight">
                         Fusion Official Socials
                       </p>
-                      <p className="text-[10px] text-white/55">
+                      <p className="text-[10px] text-white/65">
                         fusion-bio.vercel.app
                       </p>
                     </div>
@@ -1527,7 +1565,7 @@ export default function FusionWallpapersApp() {
                         <h3 className="text-xs font-bold text-white tracking-wide truncate">
                           {cat.name}
                         </h3>
-                        <p className="text-[9px] text-white/60 mt-0.5">
+                        <p className="text-[9px] text-white/65 mt-0.5">
                           {catWallpapers.length} wallpapers
                         </p>
                       </div>
@@ -1562,7 +1600,7 @@ export default function FusionWallpapersApp() {
                   <h3 className="text-sm font-semibold text-white">
                     No Wallpapers Yet
                   </h3>
-                  <p className="text-xs text-white/60 mt-1">
+                  <p className="text-xs text-white/70 mt-1">
                     Admin hasn&apos;t uploaded any wallpapers for this category.
                   </p>
                 </GlassContainer>
@@ -1599,7 +1637,7 @@ export default function FusionWallpapersApp() {
                         alt={hero.title}
                         className="w-full h-full object-cover"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#070707] via-black/40 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/35 to-transparent" />
                       <div className="absolute bottom-7 left-8 right-8 max-w-xl space-y-2">
                         <span className="inline-block px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-[10px] font-bold text-white border border-white/25 uppercase tracking-widest">
                           Featured Today
@@ -1667,7 +1705,7 @@ export default function FusionWallpapersApp() {
                         onClick={() => openWallpaperDetail(rankedItem)}
                         className="group relative flex items-end shrink-0 cursor-pointer select-none"
                       >
-                        <span className="text-[105px] leading-none font-black text-transparent [-webkit-text-stroke:2.5px_rgba(255,255,255,0.32)] group-hover:[-webkit-text-stroke:2.5px_rgba(255,255,255,0.8)] transition-all -mr-5 z-0 pointer-events-none">
+                        <span className="text-[105px] leading-none font-black text-transparent [-webkit-text-stroke:2.5px_rgba(255,255,255,0.35)] group-hover:[-webkit-text-stroke:2.5px_rgba(255,255,255,0.85)] transition-all -mr-5 z-0 pointer-events-none">
                           {rankIdx + 1}
                         </span>
                         <div className="relative z-10 w-32 h-48 rounded-2xl overflow-hidden bg-white/5 border border-white/15 shadow-xl group-hover:scale-105 group-hover:border-white/40 transition-all duration-300">
@@ -1716,7 +1754,7 @@ export default function FusionWallpapersApp() {
             >
               <AlertCircle className="h-8 w-8 text-red-400 mx-auto mb-2" />
               <h3 className="text-sm font-bold text-white">Connection Error</h3>
-              <p className="text-xs text-white/60 mt-1 mb-3">{fetchError}</p>
+              <p className="text-xs text-white/70 mt-1 mb-3">{fetchError}</p>
               <GlassButton
                 typeShape="pill"
                 activeWhite={true}
@@ -1738,7 +1776,7 @@ export default function FusionWallpapersApp() {
                   ? "You haven't saved any wallpapers yet."
                   : "No Wallpapers Found"}
               </h3>
-              <p className="text-xs text-white/60 mt-1">
+              <p className="text-xs text-white/70 mt-1">
                 {activeTab === "saved"
                   ? "Tap the 3-dot menu on any wallpaper to save it."
                   : "Try clearing your search or filter."}
@@ -1775,7 +1813,7 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "home"
                   ? "glass-active-white font-bold"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/75 hover:text-white"
               }`}
             >
               <Home className="h-4 w-4" />
@@ -1793,7 +1831,7 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "explore"
                   ? "glass-active-white font-bold"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/75 hover:text-white"
               }`}
             >
               <Compass className="h-4 w-4" />
@@ -1818,7 +1856,7 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "saved"
                   ? "glass-active-white font-bold"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/75 hover:text-white"
               }`}
             >
               <Bookmark
@@ -1838,7 +1876,7 @@ export default function FusionWallpapersApp() {
               className={`flex-1 flex flex-col items-center gap-0.5 py-1.5 rounded-full transition-all duration-200 active:scale-95 ${
                 activeTab === "profile"
                   ? "glass-active-white font-bold"
-                  : "text-white/65 hover:text-white"
+                  : "text-white/75 hover:text-white"
               }`}
             >
               <UserIcon className="h-4 w-4" />
@@ -1850,16 +1888,34 @@ export default function FusionWallpapersApp() {
         </GlassContainer>
       </nav>
 
-      {/* ================= LIQUID GLASS WALLPAPER DETAIL SCREEN ================= */}
+      {/* ================= WALLPAPER DETAIL SCREEN (WITH DYNAMIC MUSIC-PLAYER STYLE MOVING ARTWORK BACKGROUND) ================= */}
       {selectedWallpaper && (
         <div
           ref={detailScrollRef}
           role="dialog"
           aria-modal="true"
           aria-label={selectedWallpaper.title}
-          className="fixed inset-0 z-50 bg-black/92 backdrop-blur-2xl overflow-y-auto animate-in fade-in duration-150"
+          className="fixed inset-0 z-50 bg-[#08090c] overflow-y-auto animate-in fade-in duration-200"
         >
-          <div className="max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
+          {/* Dynamic Music-Player Style Moving Artwork Background for the Selected Wallpaper */}
+          <div
+            aria-hidden="true"
+            className="pointer-events-none fixed inset-0 z-0 overflow-hidden"
+          >
+            <img
+              src={selectedWallpaper.image_url}
+              alt=""
+              className="absolute -top-[15%] -left-[15%] w-[130%] h-[130%] object-cover blur-[85px] saturate-[2.0] brightness-[0.65] opacity-90 animate-ambient-1 select-none"
+            />
+            <img
+              src={selectedWallpaper.image_url}
+              alt=""
+              className="absolute -bottom-[15%] -right-[15%] w-[130%] h-[130%] object-cover blur-[105px] saturate-[2.2] brightness-[0.55] opacity-80 animate-ambient-2 select-none"
+            />
+            <div className="absolute inset-0 bg-gradient-to-b from-black/25 via-black/40 to-black/75 backdrop-blur-[25px]" />
+          </div>
+
+          <div className="relative z-10 max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
             <div className="w-full flex items-center justify-between mb-2.5">
               <GlassButton
                 typeShape="circle"
@@ -1872,10 +1928,10 @@ export default function FusionWallpapersApp() {
               </GlassButton>
 
               <div className="text-center px-2">
-                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide">
+                <h1 className="text-base sm:text-lg font-bold text-white tracking-wide drop-shadow">
                   {selectedWallpaper.title}
                 </h1>
-                <p className="text-[11px] text-white/60 capitalize">
+                <p className="text-[11px] text-white/75 capitalize">
                   {selectedWallpaper.category
                     ? animeCategories.find(
                         (c) => c.id === selectedWallpaper.category
@@ -1916,7 +1972,7 @@ export default function FusionWallpapersApp() {
 
             {/* PERFECT WALLPAPER BOX WITH TOP-LEFT ICON-ONLY EXPAND BUTTON */}
             <div
-              className="relative inline-block rounded-3xl overflow-hidden bg-white/5 border border-white/20 shadow-2xl mx-auto w-fit max-w-full mb-3"
+              className="relative inline-block rounded-3xl overflow-hidden bg-white/5 border border-white/20 shadow-[0_20px_60px_rgba(0,0,0,0.75)] mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
             >
               <img
@@ -2029,12 +2085,12 @@ export default function FusionWallpapersApp() {
             )}
 
             {/* RELATED WALLPAPERS SECTION */}
-            <div className="w-full pt-3 border-t border-white/10">
+            <div className="w-full pt-3 border-t border-white/15">
               <h3 className="text-sm font-bold text-white tracking-wide mb-3">
                 Related wallpapers
               </h3>
               {relatedWallpapers.length === 0 ? (
-                <p className="text-xs text-white/50">
+                <p className="text-xs text-white/60">
                   More wallpapers coming soon.
                 </p>
               ) : (
@@ -2064,7 +2120,7 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= AUTHENTICATION MODAL (DARK SMOKED GLASS FOR HIGH READABILITY) ================= */}
+      {/* ================= AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
         <DialogContent
           style={{
