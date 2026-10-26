@@ -94,6 +94,7 @@ const ADMIN_UUID =
 const HERO_TAG = "__pc_hero__";
 const TOP10_TAG_PREFIX = "__top10_";
 
+// Official Fusion social accounts configured in the project
 const OFFICIAL_FUSION_SOCIALS = [
   {
     id: "fusion-bio",
@@ -186,9 +187,10 @@ export default function FusionWallpapersApp() {
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
-  // Default to Dark OLED theme
+  // Theme state with localStorage persistence (Default: dark OLED)
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
+  // Local fallback overrides in case database `tags` column isn't present
   const [curationOverrides, setCurationOverrides] = useState<
     Record<string, LocalCurationOverride>
   >({});
@@ -282,8 +284,16 @@ export default function FusionWallpapersApp() {
   const isAdmin = user?.id === ADMIN_UUID;
   const isLight = theme === "light";
 
+  // Load saved theme & curation overrides on mount
   useEffect(() => {
     if (typeof window === "undefined") return;
+    const savedTheme = localStorage.getItem("fusion-theme") as
+      | "dark"
+      | "light"
+      | null;
+    if (savedTheme === "light" || savedTheme === "dark") {
+      setTheme(savedTheme);
+    }
     try {
       const savedOverrides = localStorage.getItem("fusion-curation-overrides");
       if (savedOverrides) {
@@ -294,6 +304,7 @@ export default function FusionWallpapersApp() {
     }
   }, []);
 
+  // Sync theme with document root & body
   useEffect(() => {
     if (typeof document === "undefined") return;
     const htmlEl = document.documentElement;
@@ -305,6 +316,7 @@ export default function FusionWallpapersApp() {
       htmlEl.classList.remove("theme-light");
       bodyEl.classList.remove("theme-light");
     }
+    localStorage.setItem("fusion-theme", theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -331,7 +343,6 @@ export default function FusionWallpapersApp() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "INITIAL_SESSION") return;
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (event === "PASSWORD_RECOVERY") {
@@ -357,6 +368,7 @@ export default function FusionWallpapersApp() {
     return () => subscription.unsubscribe();
   }, [supabase]);
 
+  // Curated PC Hero Banner Wallpapers (Admin picks first; falls back to latest 5)
   const pcHeroWallpapers = useMemo(() => {
     if (wallpapers.length === 0) return [];
     const adminChosen = wallpapers.filter(
@@ -867,6 +879,7 @@ export default function FusionWallpapersApp() {
   ) => {
     setCurationOverrides((prev) => {
       const next = { ...prev };
+      // If a rank is assigned, clear that same rank from any other wallpaper
       if (top10Rank !== null) {
         Object.keys(next).forEach((id) => {
           if (id !== wallpaperId && next[id]?.top10Rank === top10Rank) {
@@ -897,10 +910,7 @@ export default function FusionWallpapersApp() {
 
       const { error: storageError } = await supabase.storage
         .from("wallpapers")
-        .upload(fileName, uploadFile, {
-          cacheControl: "31536000",
-          upsert: false,
-        });
+        .upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
       if (storageError) throw storageError;
 
       const {
@@ -1017,6 +1027,7 @@ export default function FusionWallpapersApp() {
       const parsedRank =
         editTop10Rank === "none" ? null : parseInt(editTop10Rank, 10);
 
+      // If assigning a specific Top 10 rank, remove that same rank tag from any other wallpaper
       if (parsedRank !== null) {
         const conflicting = wallpapers.filter(
           (w) =>
@@ -1057,6 +1068,7 @@ export default function FusionWallpapersApp() {
         .eq("id", selectedWallpaper.id);
 
       if (error) {
+        // Fallback if `tags` column does not exist in DB schema
         const { error: fallbackErr } = await supabase
           .from("wallpapers")
           .update({
@@ -1143,6 +1155,7 @@ export default function FusionWallpapersApp() {
     return scored.map((s) => s.wallpaper);
   }, [wallpapers, selectedWallpaper]);
 
+  // Top 10 Today Ranking System (Respects Admin-assigned #1..#10 slots first, auto-fills remaining slots)
   const topTenDailyWallpapers = useMemo(() => {
     if (wallpapers.length === 0) return [];
     const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
@@ -1228,6 +1241,7 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  // --- REUSABLE OFFICIAL SOCIALS CARD (FITS SINGLE-LINE PC PROFILE GRID) ---
   const renderOfficialSocialsSection = () => (
     <GlassContainer
       type="rounded"
@@ -1288,6 +1302,7 @@ export default function FusionWallpapersApp() {
     </GlassContainer>
   );
 
+  // --- REUSABLE "BUILT BY FUSION" FOOTER (SHOWN ONLY ON HOME PAGE) ---
   const renderBuiltByFusionFooter = () => (
     <footer className="w-full pt-10 pb-6 text-center select-none">
       <p
@@ -1562,6 +1577,7 @@ export default function FusionWallpapersApp() {
               </GlassButton>
             )}
 
+            {/* CIRCULAR THEME TOGGLE BUTTON ONLY ON THE PROFILE PAGE */}
             {activeTab === "profile" && (
               <GlassButton
                 typeShape="circle"
@@ -1660,6 +1676,7 @@ export default function FusionWallpapersApp() {
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-8 z-10">
           {user ? (
             <div className="space-y-6">
+              {/* SIDE-BY-SIDE IN ONE LINE ON PC (md:grid-cols-2), STACKED ON MOBILE */}
               <div className="max-w-md md:max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
                 <GlassContainer
                   type="rounded"
@@ -1754,6 +1771,7 @@ export default function FusionWallpapersApp() {
                   </div>
                 </GlassContainer>
 
+                {/* Official Socials Card */}
                 {renderOfficialSocialsSection()}
               </div>
 
@@ -1855,6 +1873,7 @@ export default function FusionWallpapersApp() {
                 </div>
               </GlassContainer>
 
+              {/* Official Socials Card */}
               {renderOfficialSocialsSection()}
             </div>
           )}
@@ -1895,7 +1914,6 @@ export default function FusionWallpapersApp() {
                       <img
                         src={bannerUrl}
                         alt={cat.name}
-                        loading="lazy"
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
@@ -1951,12 +1969,13 @@ export default function FusionWallpapersApp() {
       ) : (
         <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-6 flex flex-col justify-between">
           <div>
-            {/* ================= PC ONLY SECTION: HERO BANNER & TOP 10 TODAY ================= */}
+            {/* ================= PC ONLY SECTION: AUTO-SCROLLING HERO BANNER & TOP 10 TODAY RANKING ================= */}
             {activeTab === "home" &&
               !searchQuery &&
               selectedPillCategory === "All" &&
               pcHeroWallpapers.length > 0 && (
                 <div className="hidden md:block mb-9 space-y-7 pt-2">
+                  {/* 1. PC Hero Banner with Natural Light-Mode Shadow & Transparent Scroll Buttons */}
                   <div
                     className={`group relative w-full h-[360px] rounded-3xl overflow-hidden bg-[#0a0a0a] border transition-shadow duration-300 ${
                       isLight
@@ -2015,6 +2034,7 @@ export default function FusionWallpapersApp() {
                       </div>
                     ))}
 
+                    {/* Small Rounded Full-Transparent Scroll Buttons on Banner */}
                     {pcHeroWallpapers.length > 1 && (
                       <>
                         <button
@@ -2052,7 +2072,7 @@ export default function FusionWallpapersApp() {
                     </div>
                   </div>
 
-                  {/* Top 10 Today Ranking System */}
+                  {/* 2. Top 10 Today Ranking System with Transparent Scroll Buttons & Balanced Shadow */}
                   <div className="space-y-3 relative">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
@@ -2062,6 +2082,7 @@ export default function FusionWallpapersApp() {
                         </h3>
                       </div>
 
+                      {/* Small Rounded Transparent Scroll Buttons for Top 10 Row */}
                       <div className="flex items-center gap-2">
                         <button
                           type="button"
@@ -2135,6 +2156,7 @@ export default function FusionWallpapersApp() {
                 </div>
               )}
 
+            {/* CLEAN, WELL-SPACED SAVED WALLPAPERS HEADING & COUNT */}
             {activeTab === "saved" && (
               <div className="pt-4 pb-4 px-0.5 flex items-baseline justify-between">
                 <h1
@@ -2207,6 +2229,7 @@ export default function FusionWallpapersApp() {
             )}
           </div>
 
+          {/* SHOW "BUILT BY FUSION" ONLY ON THE HOME PAGE */}
           {activeTab === "home" && !searchQuery && renderBuiltByFusionFooter()}
         </main>
       )}
@@ -2397,6 +2420,7 @@ export default function FusionWallpapersApp() {
               </div>
             )}
 
+            {/* WALLPAPER PREVIEW BOX */}
             <div
               className="relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
@@ -2441,6 +2465,7 @@ export default function FusionWallpapersApp() {
               )}
             </div>
 
+            {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS */}
             <div className="flex items-center gap-3 w-full max-w-md mb-5">
               <GlassButton
                 typeShape="pill"
@@ -2511,6 +2536,7 @@ export default function FusionWallpapersApp() {
               </GlassContainer>
             )}
 
+            {/* RELATED WALLPAPERS SECTION */}
             <div className="w-full pt-3 border-t border-white/10">
               <h3 className="text-sm font-bold tracking-wide mb-3">
                 Related wallpapers
@@ -3002,7 +3028,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN UPLOAD MODAL ================= */}
+      {/* ================= ADMIN UPLOAD MODAL (WITH PC HERO & TOP 10 CONTROLS) ================= */}
       <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
         <DialogContent
           style={{
@@ -3133,7 +3159,7 @@ export default function FusionWallpapersApp() {
         </DialogContent>
       </Dialog>
 
-      {/* ================= ADMIN EDIT WALLPAPER MODAL ================= */}
+      {/* ================= ADMIN EDIT WALLPAPER MODAL (CATEGORY, BANNER, PC HERO & TOP 10 RANK) ================= */}
       <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
         <DialogContent
           style={{
