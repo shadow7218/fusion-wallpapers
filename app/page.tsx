@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import Image from "next/image";
+import React, { useEffect, useState, useRef, useMemo } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
 import {
@@ -94,8 +93,6 @@ const ADMIN_UUID =
 
 const HERO_TAG = "__pc_hero__";
 const TOP10_TAG_PREFIX = "__top10_";
-const INITIAL_VISIBLE_WALLPAPERS = 16;
-const LOAD_MORE_STEP = 16;
 
 const OFFICIAL_FUSION_SOCIALS = [
   {
@@ -184,38 +181,19 @@ export default function FusionWallpapersApp() {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
   const top10ScrollRef = useRef<HTMLDivElement>(null);
-  const loadMoreTriggerRef = useRef<HTMLDivElement>(null);
 
   const [wallpapers, setWallpapers] = useState<Wallpaper[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
-  const [visibleCount, setVisibleCount] = useState<number>(
-    INITIAL_VISIBLE_WALLPAPERS
-  );
 
+  // Default to Dark OLED theme
   const [theme, setTheme] = useState<"dark" | "light">("dark");
 
   const [curationOverrides, setCurationOverrides] = useState<
     Record<string, LocalCurationOverride>
   >({});
 
-  // Batched image ratio updates so 30 cards don't trigger 30 separate full-page re-renders
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
-  const pendingRatiosRef = useRef<Record<string, number>>({});
-  const ratioFlushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const recordImageRatio = useCallback((id: string, ratio: number) => {
-    if (pendingRatiosRef.current[id] !== undefined) return;
-    pendingRatiosRef.current[id] = ratio;
-    if (!ratioFlushTimerRef.current) {
-      ratioFlushTimerRef.current = setTimeout(() => {
-        const batch = { ...pendingRatiosRef.current };
-        setImageRatios((prev) => ({ ...prev, ...batch }));
-        ratioFlushTimerRef.current = null;
-      }, 120);
-    }
-  }, []);
-
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -306,13 +284,6 @@ export default function FusionWallpapersApp() {
 
   useEffect(() => {
     if (typeof window === "undefined") return;
-    const savedTheme = localStorage.getItem("fusion-theme") as
-      | "dark"
-      | "light"
-      | null;
-    if (savedTheme === "light" || savedTheme === "dark") {
-      setTheme(savedTheme);
-    }
     try {
       const savedOverrides = localStorage.getItem("fusion-curation-overrides");
       if (savedOverrides) {
@@ -334,7 +305,6 @@ export default function FusionWallpapersApp() {
       htmlEl.classList.remove("theme-light");
       bodyEl.classList.remove("theme-light");
     }
-    localStorage.setItem("fusion-theme", theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -361,9 +331,7 @@ export default function FusionWallpapersApp() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange(async (event, session) => {
-      // Prevent duplicate profile & saved_wallpapers queries on initial mount
       if (event === "INITIAL_SESSION") return;
-
       const currentUser = session?.user ?? null;
       setUser(currentUser);
       if (event === "PASSWORD_RECOVERY") {
@@ -1156,34 +1124,6 @@ export default function FusionWallpapersApp() {
     selectedPillCategory,
   ]);
 
-  useEffect(() => {
-    setVisibleCount(INITIAL_VISIBLE_WALLPAPERS);
-  }, [activeTab, selectedPillCategory, selectedExploreCategory, searchQuery]);
-
-  useEffect(() => {
-    const target = loadMoreTriggerRef.current;
-    if (!target) return;
-    if (visibleCount >= filteredWallpapers.length) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries[0]?.isIntersecting) {
-          setVisibleCount((prev) =>
-            Math.min(prev + LOAD_MORE_STEP, filteredWallpapers.length)
-          );
-        }
-      },
-      { rootMargin: "320px" }
-    );
-    observer.observe(target);
-    return () => observer.disconnect();
-  }, [visibleCount, filteredWallpapers.length]);
-
-  const visibleWallpapers = useMemo(
-    () => filteredWallpapers.slice(0, visibleCount),
-    [filteredWallpapers, visibleCount]
-  );
-
   const savedWallpapersList = useMemo(
     () => wallpapers.filter((w) => savedIds.includes(w.id)),
     [wallpapers, savedIds]
@@ -1310,12 +1250,10 @@ export default function FusionWallpapersApp() {
           >
             <div className="flex items-center gap-3 min-w-0">
               <div className="h-9 w-9 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
-                <Image
+                <img
                   src="/logo.webp"
                   alt={social.name}
-                  width={36}
-                  height={36}
-                  className="h-9 w-9 object-cover"
+                  className="h-full w-full object-cover"
                 />
               </div>
               <div className="min-w-0">
@@ -1364,13 +1302,11 @@ export default function FusionWallpapersApp() {
 
   const renderWallpaperCard = (
     item: Wallpaper,
-    index: number = 99,
     options?: { showRemoveSavedBtn?: boolean }
   ) => {
     const ratio = imageRatios[item.id];
     const isTall = ratio !== undefined && ratio <= 0.57;
     const isMenuOpen = activeMenu?.wallpaper.id === item.id;
-    const isPriorityLCP = index < 2 && activeTab === "home";
 
     return (
       <div
@@ -1386,21 +1322,17 @@ export default function FusionWallpapersApp() {
           } ${isTall ? "aspect-[9/16]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
         >
-          <Image
+          <img
             src={item.image_url}
             alt={item.title}
-            width={480}
-            height={isTall ? 854 : 640}
-            sizes="(max-width: 640px) 48vw, (max-width: 1024px) 32vw, 240px"
-            quality={75}
-            priority={isPriorityLCP}
-            loading={isPriorityLCP ? "eager" : "lazy"}
+            loading="lazy"
             draggable={false}
             onLoad={(e) => {
               const { naturalWidth, naturalHeight } = e.currentTarget;
-              if (naturalWidth && naturalHeight) {
-                recordImageRatio(item.id, naturalWidth / naturalHeight);
-              }
+              setImageRatios((prev) => ({
+                ...prev,
+                [item.id]: naturalWidth / naturalHeight,
+              }));
             }}
             onContextMenu={(e) => e.preventDefault()}
             className={`w-full block pointer-events-none select-none ${
@@ -1450,10 +1382,6 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      style={{
-        backgroundColor: isLight ? "#F4FEFF" : "#000000",
-        color: isLight ? "#0E2F76" : "#E5E4E2",
-      }}
       className={`min-h-screen flex flex-col pb-24 relative overflow-x-hidden font-sans transition-colors duration-200 ${
         isLight
           ? "theme-light bg-[#F4FEFF] text-[#0E2F76] selection:bg-[#0E2F76] selection:text-white"
@@ -1575,17 +1503,11 @@ export default function FusionWallpapersApp() {
             }}
             className="flex items-center gap-2.5 text-left focus:outline-none group active:scale-95 transition-transform"
           >
-            <div
-              style={{ width: 32, height: 32 }}
-              className="h-8 w-8 rounded-xl bg-white/5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0"
-            >
-              <Image
+            <div className="h-8 w-8 rounded-xl bg-white/5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
+              <img
                 src="/logo.webp"
                 alt="Fusion Logo"
-                width={32}
-                height={32}
-                priority
-                className="h-8 w-8 object-cover"
+                className="h-full w-full object-cover"
               />
             </div>
             <span
@@ -1876,10 +1798,8 @@ export default function FusionWallpapersApp() {
                   </GlassContainer>
                 ) : (
                   <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                    {savedWallpapersList.map((item, idx) =>
-                      renderWallpaperCard(item, idx, {
-                        showRemoveSavedBtn: true,
-                      })
+                    {savedWallpapersList.map((item) =>
+                      renderWallpaperCard(item, { showRemoveSavedBtn: true })
                     )}
                   </div>
                 )}
@@ -1893,12 +1813,10 @@ export default function FusionWallpapersApp() {
                 className="p-6 text-center flex flex-col justify-center"
               >
                 <div className="mx-auto h-11 w-11 rounded-2xl overflow-hidden border border-white/20 mb-3">
-                  <Image
+                  <img
                     src="/logo.webp"
                     alt="Fusion Logo"
-                    width={44}
-                    height={44}
-                    className="h-11 w-11 object-cover"
+                    className="h-full w-full object-cover"
                   />
                 </div>
                 <h2 className="text-base font-bold">Your Fusion Account</h2>
@@ -1974,13 +1892,10 @@ export default function FusionWallpapersApp() {
                       }}
                       className="group relative h-28 sm:h-36 rounded-2xl overflow-hidden bg-[#0a0a0a] border border-white/15 cursor-pointer hover:border-white/35 transition-all flex flex-col justify-end active:scale-95"
                     >
-                      <Image
+                      <img
                         src={bannerUrl}
                         alt={cat.name}
-                        width={480}
-                        height={270}
-                        sizes="(max-width: 640px) 48vw, 480px"
-                        quality={75}
+                        loading="lazy"
                         className="absolute inset-0 w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 pointer-events-none select-none"
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/95 via-black/30 to-transparent" />
@@ -2027,9 +1942,7 @@ export default function FusionWallpapersApp() {
                 </GlassContainer>
               ) : (
                 <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                  {visibleWallpapers.map((item, idx) =>
-                    renderWallpaperCard(item, idx)
-                  )}
+                  {filteredWallpapers.map((item) => renderWallpaperCard(item))}
                 </div>
               )}
             </div>
@@ -2051,68 +1964,56 @@ export default function FusionWallpapersApp() {
                         : "border-white/15 shadow-[0_20px_50px_rgba(0,0,0,0.85)]"
                     }`}
                   >
-                    {pcHeroWallpapers.map((hero, idx) => {
-                      const isActive = idx === pcHeroIndex;
-                      const isNext =
-                        idx === (pcHeroIndex + 1) % pcHeroWallpapers.length;
-                      if (!isActive && !isNext) return null;
-
-                      return (
-                        <div
-                          key={hero.id}
-                          className={`absolute inset-0 transition-opacity duration-700 ease-out cursor-pointer ${
-                            isActive
-                              ? "opacity-100 z-10 pointer-events-auto"
-                              : "opacity-0 z-0 pointer-events-none"
-                          }`}
-                          onClick={() => openWallpaperDetail(hero)}
-                        >
-                          <Image
-                            src={hero.image_url}
-                            alt={hero.title}
-                            width={1024}
-                            height={360}
-                            sizes="(max-width: 768px) 1px, 1024px"
-                            quality={80}
-                            loading="lazy"
-                            className="w-full h-full object-cover"
-                          />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
-                          <div className="absolute bottom-7 left-8 right-8 max-w-xl space-y-2">
-                            <span className="inline-block px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-[10px] font-bold text-white border border-white/25 uppercase tracking-widest">
-                              Featured Today
-                            </span>
-                            <h2 className="text-3xl font-black text-white drop-shadow-md">
-                              {hero.title}
-                            </h2>
-                            <div className="flex items-center gap-2.5 pt-1">
-                              <GlassButton
-                                typeShape="pill"
-                                activeWhite={true}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openWallpaperDetail(hero);
-                                }}
-                                className="px-5 h-9 text-xs font-extrabold"
-                              >
-                                View Wallpaper
-                              </GlassButton>
-                              <GlassButton
-                                typeShape="pill"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  toggleSaveWallpaper(e, hero);
-                                }}
-                                className="px-4 h-9 text-xs font-bold"
-                              >
-                                <Bookmark className="h-3.5 w-3.5 text-white" />
-                                <span className="text-white">Save</span>
-                              </GlassButton>
-                            </div>
+                    {pcHeroWallpapers.map((hero, idx) => (
+                      <div
+                        key={hero.id}
+                        className={`absolute inset-0 transition-opacity duration-700 ease-out cursor-pointer ${
+                          idx === pcHeroIndex
+                            ? "opacity-100 z-10 pointer-events-auto"
+                            : "opacity-0 z-0 pointer-events-none"
+                        }`}
+                        onClick={() => openWallpaperDetail(hero)}
+                      >
+                        <img
+                          src={hero.image_url}
+                          alt={hero.title}
+                          className="w-full h-full object-cover"
+                        />
+                        <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/30 to-transparent" />
+                        <div className="absolute bottom-7 left-8 right-8 max-w-xl space-y-2">
+                          <span className="inline-block px-3 py-1 rounded-full bg-white/15 backdrop-blur-md text-[10px] font-bold text-white border border-white/25 uppercase tracking-widest">
+                            Featured Today
+                          </span>
+                          <h2 className="text-3xl font-black text-white drop-shadow-md">
+                            {hero.title}
+                          </h2>
+                          <div className="flex items-center gap-2.5 pt-1">
+                            <GlassButton
+                              typeShape="pill"
+                              activeWhite={true}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openWallpaperDetail(hero);
+                              }}
+                              className="px-5 h-9 text-xs font-extrabold"
+                            >
+                              View Wallpaper
+                            </GlassButton>
+                            <GlassButton
+                              typeShape="pill"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                toggleSaveWallpaper(e, hero);
+                              }}
+                              className="px-4 h-9 text-xs font-bold"
+                            >
+                              <Bookmark className="h-3.5 w-3.5 text-white" />
+                              <span className="text-white">Save</span>
+                            </GlassButton>
                           </div>
                         </div>
-                      );
-                    })}
+                      </div>
+                    ))}
 
                     {pcHeroWallpapers.length > 1 && (
                       <>
@@ -2215,13 +2116,9 @@ export default function FusionWallpapersApp() {
                                 : "border-white/15 shadow-xl group-hover:border-white/40"
                             }`}
                           >
-                            <Image
+                            <img
                               src={rankedItem.image_url}
                               alt={rankedItem.title}
-                              width={256}
-                              height={384}
-                              sizes="(max-width: 768px) 1px, 160px"
-                              quality={75}
                               loading="lazy"
                               className="w-full h-full object-cover"
                             />
@@ -2304,35 +2201,9 @@ export default function FusionWallpapersApp() {
                 </p>
               </GlassContainer>
             ) : (
-              <>
-                <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                  {visibleWallpapers.map((item, idx) =>
-                    renderWallpaperCard(item, idx)
-                  )}
-                </div>
-
-                {visibleCount < filteredWallpapers.length && (
-                  <div
-                    ref={loadMoreTriggerRef}
-                    className="mt-6 text-center py-2"
-                  >
-                    <GlassButton
-                      typeShape="pill"
-                      onClick={() =>
-                        setVisibleCount((prev) =>
-                          Math.min(
-                            prev + LOAD_MORE_STEP,
-                            filteredWallpapers.length
-                          )
-                        )
-                      }
-                      className="px-6 h-10 text-xs font-semibold"
-                    >
-                      Load More Wallpapers
-                    </GlassButton>
-                  </div>
-                )}
-              </>
+              <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
+                {filteredWallpapers.map((item) => renderWallpaperCard(item))}
+              </div>
             )}
           </div>
 
@@ -2530,14 +2401,9 @@ export default function FusionWallpapersApp() {
               className="relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3"
               onContextMenu={(e) => e.preventDefault()}
             >
-              <Image
+              <img
                 src={selectedWallpaper.image_url}
                 alt={selectedWallpaper.title}
-                width={1080}
-                height={detailIsTall ? 1920 : 1080}
-                sizes="(max-width: 768px) 95vw, 768px"
-                quality={90}
-                priority
                 draggable={false}
                 onContextMenu={(e) => e.preventDefault()}
                 className={`block pointer-events-none select-none transition-all duration-300 ${
@@ -2658,7 +2524,7 @@ export default function FusionWallpapersApp() {
                   <div className="columns-2 sm:columns-3 gap-2.5 space-y-2.5">
                     {relatedWallpapers
                       .slice(0, relatedVisibleCount)
-                      .map((rel, idx) => renderWallpaperCard(rel, idx + 10))}
+                      .map((rel) => renderWallpaperCard(rel))}
                   </div>
                   {relatedVisibleCount < relatedWallpapers.length && (
                     <div className="mt-4 text-center">
@@ -2690,12 +2556,10 @@ export default function FusionWallpapersApp() {
         >
           <DialogHeader>
             <div className="mx-auto h-11 w-11 rounded-2xl overflow-hidden border border-white/20 mb-1">
-              <Image
+              <img
                 src="/logo.webp"
                 alt="Fusion Logo"
-                width={44}
-                height={44}
-                className="h-11 w-11 object-cover"
+                className="h-full w-full object-cover"
               />
             </div>
             <DialogTitle className="text-center text-base font-black text-white">
