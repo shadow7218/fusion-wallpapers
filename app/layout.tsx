@@ -29,16 +29,13 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en" className="bg-[#000000]" style={{ backgroundColor: "#000000" }}>
+    <html lang="en" className="bg-[#000000]">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/logo.webp" type="image/webp" />
         <link rel="apple-touch-icon" href="/logo.webp" />
       </head>
-      <body
-        className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative"
-        style={{ backgroundColor: "#000000", color: "#E5E4E2" }}
-      >
+      <body className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative">
         {children}
       </body>
     </html>
