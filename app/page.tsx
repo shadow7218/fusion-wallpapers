@@ -2230,7 +2230,7 @@ export default function FusionWallpapersApp() {
           tintOpacity={0.12}
           blurRadius={18}
           warp={false}
-          className="p-1.5"
+          className="p-1.5 fusion-nav-glass"
         >
           <div className="flex items-center justify-between relative">
             <button
