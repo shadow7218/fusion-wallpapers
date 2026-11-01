@@ -2215,7 +2215,7 @@ export default function FusionWallpapersApp() {
           type="pill"
           tintOpacity={0.12}
           blurRadius={18}
-          warp={true}
+          warp={false}
           className="p-1.5"
         >
           <div className="flex items-center justify-between relative">
