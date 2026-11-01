@@ -2331,8 +2331,8 @@ export default function FusionWallpapersApp() {
               </span>
             </button>
           </div>
-        </GlassContainer>
-      </div>
+         </div>
+        </nav>
 
       {/* ================= WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
