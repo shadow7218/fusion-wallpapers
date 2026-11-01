@@ -94,6 +94,12 @@ const ADMIN_UUID =
 
 const HERO_TAG = "__pc_hero__";
 const TOP10_TAG_PREFIX = "__top10_";
+const PHONE_TAG = "__device_phone__";
+const PC_TAG = "__device_pc__";
+const getDevice = (w: Wallpaper): "phone" | "pc" | null => {
+  const t = Array.isArray(w.tags) ? w.tags : [];
+  return t.includes(PHONE_TAG) ? "phone" : t.includes(PC_TAG) ? "pc" : null;
+};
 
 const OFFICIAL_FUSION_SOCIALS = [
   {
@@ -434,16 +440,16 @@ export default function FusionWallpapersApp() {
   }, [selectedWallpaper]);
   
   useEffect(() => {
-  setDetailSrc(null);
-  if (!selectedWallpaper) return;
-  const full = img(selectedWallpaper.image_url, 1200);
-  const loader = new Image();
-  loader.onload = () => setDetailSrc(full);
-  loader.src = full;
-  return () => {
-    loader.onload = null;
-  };
-}, [selectedWallpaper]);
+    setDetailSrc(null);
+    if (!selectedWallpaper) return;
+    const full = img(selectedWallpaper.image_url, 1200);
+    const loader = new Image();
+    loader.onload = () => setDetailSrc(full);
+    loader.src = full;
+    return () => {
+      loader.onload = null;
+    };
+  }, [selectedWallpaper]);
 
   const openWallpaperDetail = (wallpaper: Wallpaper) => {
     setActiveMenu(null);
@@ -930,6 +936,11 @@ export default function FusionWallpapersApp() {
       const parsedRank =
         uploadTop10Rank === "none" ? null : parseInt(uploadTop10Rank, 10);
       const customTags = buildUpdatedTags([], uploadShowInHero, parsedRank);
+      try {
+        const bmp = await createImageBitmap(uploadFile);
+        customTags.push(bmp.width >= bmp.height ? PC_TAG : PHONE_TAG);
+        bmp.close();
+      } catch {}
 
       const { data: insertedData, error: dbError } = await supabase
         .from("wallpapers")
@@ -1093,6 +1104,28 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  const backfillDevices = async () => {
+    if (!isAdmin) return;
+    const todo = wallpapers.filter((w) => !getDevice(w));
+    if (!todo.length) return alert("All wallpapers are already tagged.");
+    let done = 0;
+    for (const w of todo) {
+      try {
+        const ratio = await new Promise<number>((res, rej) => {
+          const im = new Image();
+          im.onload = () => res(im.naturalWidth / im.naturalHeight);
+          im.onerror = rej;
+          im.src = img(w.image_url, 80);
+        });
+        const tags = [...(Array.isArray(w.tags) ? w.tags : []), ratio >= 1 ? PC_TAG : PHONE_TAG];
+        await supabase.from("wallpapers").update({ tags }).eq("id", w.id);
+        done++;
+      } catch {}
+    }
+    alert(`Tagged ${done} of ${todo.length}.`);
+    await fetchWallpapers();
+  };
+
   const filteredWallpapers = useMemo(() => {
     return wallpapers.filter((item) => {
       if (activeTab === "saved" && !savedIds.includes(item.id)) return false;
@@ -1105,10 +1138,12 @@ export default function FusionWallpapersApp() {
         if (getWallpaperCategory(item) !== selectedExploreCategory) return false;
       }
 
-      if (activeTab === "home" && selectedPillCategory !== "All") {
-        const catId = animeCategories.find(
-          (c) => c.name === selectedPillCategory
-        )?.id;
+      if (activeTab === "home" && selectedPillCategory === "Phone") {
+        if (getDevice(item) !== "phone") return false;
+      } else if (activeTab === "home" && selectedPillCategory === "PC") {
+        if (getDevice(item) !== "pc") return false;
+      } else if (activeTab === "home" && selectedPillCategory !== "All") {
+        const catId = animeCategories.find((c) => c.name === selectedPillCategory)?.id;
         if (getWallpaperCategory(item) !== catId) return false;
       }
 
@@ -1640,7 +1675,7 @@ export default function FusionWallpapersApp() {
 
           {activeTab === "home" && !searchQuery && (
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 pb-1">
-              {["All", ...animeCategories.map((c) => c.name)].map(
+              {["All", "Phone", "PC", ...animeCategories.filter((c) => c.showOnHome !== false).map((c) => c.name)].map(
                 (pillName) => {
                   const isActive = selectedPillCategory === pillName;
                   return (
@@ -1659,6 +1694,11 @@ export default function FusionWallpapersApp() {
                     </GlassButton>
                   );
                 }
+              )}
+              {isAdmin && (
+                <GlassButton typeShape="pill" onClick={backfillDevices} className="px-4 py-1.5 text-[11px] font-semibold shrink-0">
+                  Tag old
+                </GlassButton>
               )}
             </div>
           )}
@@ -2226,16 +2266,17 @@ export default function FusionWallpapersApp() {
         className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
         <div
-         className="relative rounded-full p-1.5"
-         style={{
-          background:
-           "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.03) 55%, rgba(0,0,0,0.10)), rgba(24,24,28,0.10)",
-          backdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
-          WebkitBackdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
-          border: "1px solid rgba(255,255,255,0.25)",
-          boxShadow:
-           "0 14px 34px rgba(0,0,0,0.6), inset 0 1.5px 1px rgba(255,255,255,0.6), inset 0 -1.5px 1px rgba(255,255,255,0.25), inset 0 0 22px rgba(255,255,255,0.10)",
-        }}>
+          className="relative rounded-full p-1.5"
+          style={{
+            background:
+              "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 55%, rgba(0,0,0,0.18)), rgba(18,18,20,0.22)",
+            backdropFilter: "blur(16px) saturate(145%) brightness(1.05)",
+            WebkitBackdropFilter: "blur(16px) saturate(145%) brightness(1.05)",
+            border: "1px solid rgba(255,255,255,0.16)",
+            boxShadow:
+              "0 12px 28px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4), inset 0 -1px 1px rgba(255,255,255,0.12), inset 0 0 12px rgba(255,255,255,0.05)",
+          }}
+        >
           <div className="flex items-center justify-between relative">
             <button
               type="button"
@@ -2331,8 +2372,8 @@ export default function FusionWallpapersApp() {
               </span>
             </button>
           </div>
-         </div>
-        </nav>
+        </div>
+      </nav>
 
       {/* ================= WALLPAPER DETAIL SCREEN ================= */}
       {selectedWallpaper && (
@@ -2413,7 +2454,7 @@ export default function FusionWallpapersApp() {
             {/* WALLPAPER PREVIEW BOX */}
             <div
               className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 ${
-               detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
+                detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
               }`}
             >
               <img
