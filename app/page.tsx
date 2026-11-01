@@ -49,6 +49,7 @@ import {
 
 import { animeCategories } from "../config/animeCategories";
 import { img } from "@/lib/img";
+import { AvatarBadge, AVATARS } from "@/components/avatars";
 import {
   GlassContainer,
   GlassButton,
@@ -80,6 +81,14 @@ interface PendingIntent {
 interface LocalCurationOverride {
   isHero?: boolean;
   top10Rank?: number | null;
+}
+
+interface PendingUpload {
+  id: string;
+  previewUrl: string;
+  ratio: number;
+  title: string;
+  failed?: boolean;
 }
 
 type AuthStep =
@@ -200,6 +209,13 @@ export default function FusionWallpapersApp() {
   >({});
 
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
+  const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [isAvatarPageOpen, setIsAvatarPageOpen] = useState<boolean>(false);
+  const [colCount, setColCount] = useState<number>(2);
+  const [lastSkel, setLastSkel] = useState<number[]>([0.56, 1.5, 0.75, 0.56, 1.2, 0.75]);
+  const sessionSeed = useRef<number>(Math.random());
+  const frozenRatios = useRef<Record<string, number>>({});
+
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -310,6 +326,48 @@ export default function FusionWallpapersApp() {
     } catch {
       // Ignore parse errors
     }
+  }, []);
+
+  useEffect(() => {
+    try {
+      const r = JSON.parse(localStorage.getItem("fusion_ratios_v1") || "{}");
+      setImageRatios((prev) => ({ ...r, ...prev }));
+      const s = JSON.parse(localStorage.getItem("fusion_skel_v1") || "[]");
+      if (Array.isArray(s) && s.length >= 4) setLastSkel(s);
+    } catch {}
+    const onResize = () =>
+      setColCount(window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 3 : 2);
+    onResize();
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        if (Object.keys(imageRatios).length)
+          localStorage.setItem("fusion_ratios_v1", JSON.stringify(imageRatios));
+      } catch {}
+    }, 600);
+    return () => clearTimeout(t);
+  }, [imageRatios]);
+
+  useEffect(() => {
+    const r = wallpapers.slice(0, 8).map((w) => imageRatios[w.id]).filter(Boolean);
+    if (r.length >= 4) {
+      try { localStorage.setItem("fusion_skel_v1", JSON.stringify(r)); } catch {}
+    }
+  }, [wallpapers, imageRatios]);
+
+  useEffect(() => {
+    let hiddenAt = 0;
+    const onVis = () => {
+      if (document.hidden) hiddenAt = Date.now();
+      else if (hiddenAt && Date.now() - hiddenAt > 60000) fetchWallpapers(true);
+    };
+    document.addEventListener("visibilitychange", onVis);
+    return () => document.removeEventListener("visibilitychange", onVis);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -480,8 +538,8 @@ export default function FusionWallpapersApp() {
     setIsExpanded(false);
   };
 
-  const fetchWallpapers = async () => {
-    setLoading(true);
+  const fetchWallpapers = async (silent = false) => {
+    if (!silent) setLoading(true);
     setFetchError(null);
     try {
       const { data, error } = await supabase
@@ -912,101 +970,102 @@ export default function FusionWallpapersApp() {
     });
   };
 
+  const handleChooseAvatar = async (avatarId: string) => {
+    if (!user) return;
+    setUser({ ...user, user_metadata: { ...user.user_metadata, avatar_id: avatarId } } as User);
+    await supabase.auth.updateUser({ data: { avatar_id: avatarId } });
+  };
+
   const handleAdminUpload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!isAdmin || !uploadFile || !uploadTitle.trim() || uploading) return;
-    setUploading(true);
+    if (!isAdmin || !uploadFile || !uploadTitle.trim()) return;
+
+    const file = uploadFile;
+    const title = uploadTitle.trim();
+    const category = uploadCategory;
+    const showHero = uploadShowInHero;
+    const rank = uploadTop10Rank;
+
+    const previewUrl = URL.createObjectURL(file);
+    const ratio = await new Promise<number>((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im.naturalWidth / im.naturalHeight || 0.75);
+      im.onerror = () => resolve(0.75);
+      im.src = previewUrl;
+    });
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    setPendingUploads((prev) => [{ id: pendingId, previewUrl, ratio, title }, ...prev]);
+
+    setUploadTitle("");
+    setUploadFile(null);
+    setUploadShowInHero(false);
+    setUploadTop10Rank("none");
+    setIsUploadModalOpen(false);
+    setActiveTab("home");
+    setSelectedPillCategory("All");
+    window.scrollTo({ top: 0, behavior: "smooth" });
 
     try {
-      const fileExt = uploadFile.name.split(".").pop();
-      const prefix =
-        uploadCategory === "none" ? "general" : uploadCategory.toLowerCase();
-      const fileName = `${prefix}-${Date.now()}-${Math.random()
-        .toString(36)
-        .substring(2, 7)}.${fileExt}`;
+      const fileExt = file.name.split(".").pop();
+      const prefix = category === "none" ? "general" : category.toLowerCase();
+      const fileName = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
 
       const { error: storageError } = await supabase.storage
         .from("wallpapers")
-        .upload(fileName, uploadFile, { cacheControl: "3600", upsert: false });
+        .upload(fileName, file, { cacheControl: "3600", upsert: false });
       if (storageError) throw storageError;
 
-      const {
-        data: { publicUrl },
-      } = supabase.storage.from("wallpapers").getPublicUrl(fileName);
+      const { data: { publicUrl } } = supabase.storage.from("wallpapers").getPublicUrl(fileName);
 
       let isFirst = false;
-      if (uploadCategory !== "none") {
+      if (category !== "none") {
         const { data: existingInCategory } = await supabase
-          .from("wallpapers")
-          .select("id")
-          .eq("category", uploadCategory)
-          .limit(1);
+          .from("wallpapers").select("id").eq("category", category).limit(1);
         isFirst = !existingInCategory || existingInCategory.length === 0;
       }
 
-      const parsedRank =
-        uploadTop10Rank === "none" ? null : parseInt(uploadTop10Rank, 10);
-      const customTags = buildUpdatedTags([], uploadShowInHero, parsedRank);
-      try {
-        const bmp = await createImageBitmap(uploadFile);
-        customTags.push(bmp.width >= bmp.height ? PC_TAG : PHONE_TAG);
-        bmp.close();
-      } catch {}
+      const parsedRank = rank === "none" ? null : parseInt(rank, 10);
+      const customTags = buildUpdatedTags([], showHero, parsedRank);
+      customTags.push(ratio >= 1 ? PC_TAG : PHONE_TAG);
 
       const { data: insertedData, error: dbError } = await supabase
         .from("wallpapers")
-        .insert([
-          {
-            title: uploadTitle.trim(),
-            image_url: publicUrl,
-            storage_path: fileName,
-            category: uploadCategory === "none" ? null : uploadCategory,
-            is_banner: isFirst,
-            tags: customTags,
-          },
-        ])
+        .insert([{
+          title,
+          image_url: publicUrl,
+          storage_path: fileName,
+          category: category === "none" ? null : category,
+          is_banner: isFirst,
+          tags: customTags,
+        }])
         .select()
         .maybeSingle();
 
       if (dbError) {
         const { data: fallbackData, error: fallbackError } = await supabase
           .from("wallpapers")
-          .insert([
-            {
-              title: uploadTitle.trim(),
-              image_url: publicUrl,
-              storage_path: fileName,
-              category: uploadCategory === "none" ? null : uploadCategory,
-            },
-          ])
+          .insert([{
+            title,
+            image_url: publicUrl,
+            storage_path: fileName,
+            category: category === "none" ? null : category,
+          }])
           .select()
           .maybeSingle();
         if (fallbackError) throw fallbackError;
-        if (fallbackData?.id) {
-          saveLocalCurationOverride(
-            fallbackData.id,
-            uploadShowInHero,
-            parsedRank
-          );
-        }
+        if (fallbackData?.id) saveLocalCurationOverride(fallbackData.id, showHero, parsedRank);
       } else if (insertedData?.id) {
-        saveLocalCurationOverride(
-          insertedData.id,
-          uploadShowInHero,
-          parsedRank
-        );
+        saveLocalCurationOverride(insertedData.id, showHero, parsedRank);
       }
 
-      setUploadTitle("");
-      setUploadFile(null);
-      setUploadShowInHero(false);
-      setUploadTop10Rank("none");
-      setIsUploadModalOpen(false);
-      await fetchWallpapers();
+      setPendingUploads((prev) => prev.filter((p) => p.id !== pendingId));
+      URL.revokeObjectURL(previewUrl);
+      await fetchWallpapers(true);
     } catch (err: any) {
+      setPendingUploads((prev) =>
+        prev.map((p) => (p.id === pendingId ? { ...p, failed: true } : p))
+      );
       alert(`Upload failed: ${err.message}`);
-    } finally {
-      setUploading(false);
     }
   };
 
@@ -1367,18 +1426,25 @@ export default function FusionWallpapersApp() {
     return (
       <div
         key={item.id}
-        className="break-inside-avoid mb-2.5 relative flex flex-col"
+        className="break-inside-avoid mb-2 relative flex flex-col"
       >
         <div
           onClick={() => openWallpaperDetail(item)}
-          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-95 transition-transform duration-150 border ${
+          style={{
+            aspectRatio: String(
+              imageRatios[item.id] === undefined ? 0.75 : Math.max(imageRatios[item.id], 9 / 16)
+            ),
+          }}
+          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.97] transition-transform duration-150 ease-out border ${
             isLight
               ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15 shadow-[0_6px_16px_rgba(14,47,118,0.08)]"
               : "bg-[#0a0a0a] border-white/10"
-          } ${isTall ? "aspect-[9/16]" : ""} ${imageRatios[item.id] === undefined ? "min-h-[140px]" : ""}`}
+          }`}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {imageRatios[item.id] === undefined && <div className="fusion-shimmer absolute inset-0" />}
+          {imageRatios[item.id] === undefined && (
+            <div className="fusion-shimmer absolute inset-0" />
+          )}
           <img
             src={img(item.image_url, 500)}
             alt={item.title}
@@ -1386,14 +1452,11 @@ export default function FusionWallpapersApp() {
             draggable={false}
             onLoad={(e) => {
               const { naturalWidth, naturalHeight } = e.currentTarget;
-              setImageRatios((prev) => ({
-                ...prev,
-                [item.id]: naturalWidth / naturalHeight,
-              }));
+              setImageRatios((prev) => ({ ...prev, [item.id]: naturalWidth / naturalHeight }));
             }}
             onContextMenu={(e) => e.preventDefault()}
-            className={`w-full block pointer-events-none select-none transition-opacity duration-300 ${imageRatios[item.id] === undefined ? "opacity-0" : "opacity-100"} ${
-              isTall ? "h-full object-cover" : "h-auto object-cover"
+            className={`absolute inset-0 h-full w-full object-cover pointer-events-none select-none transition-opacity duration-300 ease-out ${
+              imageRatios[item.id] === undefined ? "opacity-0" : "opacity-100"
             }`}
           />
           <div
@@ -1428,6 +1491,119 @@ export default function FusionWallpapersApp() {
             <MoreHorizontal className="h-3.5 w-3.5" />
           </button>
         </div>
+      </div>
+    );
+  };
+
+  const orderFeed = (list: Wallpaper[]) => {
+    const NEW_MS = 48 * 60 * 60 * 1000; // "new" = last 48 hours
+    const now = Date.now();
+    const fresh = list
+      .filter((w) => now - new Date(w.created_at).getTime() < NEW_MS)
+      .sort((a, b) => +new Date(b.created_at) - +new Date(a.created_at));
+    const freshIds = new Set(fresh.map((w) => w.id));
+    const seed = Math.floor(sessionSeed.current * 1e6);
+    const hash = (s: string) => {
+      let h = seed;
+      for (const c of s) h = (h * 31 + c.charCodeAt(0)) | 0;
+      return h;
+    };
+    const rest = list.filter((w) => !freshIds.has(w.id)).sort((a, b) => hash(a.id) - hash(b.id));
+    return [...fresh, ...rest];
+  };
+
+  const renderPendingCard = (p: PendingUpload) => (
+    <div
+      key={p.id}
+      className="mb-2 flex flex-col"
+      onClick={() => p.failed && setPendingUploads((prev) => prev.filter((x) => x.id !== p.id))}
+    >
+      <div
+        style={{ aspectRatio: String(Math.max(p.ratio, 9 / 16)) }}
+        className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0a0a0a]"
+      >
+        <img
+          src={p.previewUrl}
+          alt=""
+          className={`absolute inset-0 h-full w-full object-cover transition-[opacity,filter] duration-300 ease-out ${
+            p.failed ? "opacity-30" : "opacity-50 blur-[2px]"
+          }`}
+        />
+        {!p.failed && <div className="fusion-shimmer absolute inset-0" />}
+        {!p.failed && (
+          <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/10">
+            <div className="fusion-bar h-full w-1/3 rounded-full bg-white/80" />
+          </div>
+        )}
+      </div>
+      <div className="mt-1 px-0.5 text-[11px] text-white/70 truncate">
+        {p.failed ? "Upload failed (tap to dismiss)" : `Uploading ${p.title}…`}
+      </div>
+    </div>
+  );
+
+  const renderMasonry = (
+    items: Wallpaper[],
+    opts?: { pending?: PendingUpload[]; showRemoveSavedBtn?: boolean }
+  ) => {
+    type Entry = { kind: "pending"; p: PendingUpload } | { kind: "wp"; w: Wallpaper };
+    const entries: Entry[] = [
+      ...(opts?.pending || []).map((p) => ({ kind: "pending" as const, p })),
+      ...items.map((w) => ({ kind: "wp" as const, w })),
+    ];
+    const heights: number[] = Array(colCount).fill(0);
+    const cols: Entry[][] = Array.from({ length: colCount }, () => []);
+    for (const e of entries) {
+      const id = e.kind === "pending" ? e.p.id : e.w.id;
+      if (frozenRatios.current[id] === undefined) {
+        frozenRatios.current[id] =
+          e.kind === "pending" ? e.p.ratio : imageRatios[e.w.id] ?? 0.75;
+      }
+      const h = 1 / Math.max(frozenRatios.current[id], 9 / 16) + 0.14;
+      const i = heights.indexOf(Math.min(...heights));
+      cols[i].push(e);
+      heights[i] += h;
+    }
+    return (
+      <div className="flex items-start gap-1.5 -mx-2.5">
+        {cols.map((col, ci) => (
+          <div key={ci} className="flex-1 min-w-0 flex flex-col">
+            {col.map((e) =>
+              e.kind === "pending"
+                ? renderPendingCard(e.p)
+                : renderWallpaperCard(e.w, { showRemoveSavedBtn: opts?.showRemoveSavedBtn })
+            )}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const renderSkeleton = () => {
+    const heights: number[] = Array(colCount).fill(0);
+    const cols: number[][] = Array.from({ length: colCount }, () => []);
+    lastSkel.forEach((r) => {
+      const i = heights.indexOf(Math.min(...heights));
+      cols[i].push(r);
+      heights[i] += 1 / Math.max(r, 9 / 16) + 0.14;
+    });
+    return (
+      <div className="flex items-start gap-1.5 -mx-2.5">
+        {cols.map((col, ci) => (
+          <div key={ci} className="flex-1 min-w-0 flex flex-col">
+            {col.map((r, i) => (
+              <div key={i} className="mb-2">
+                <div
+                  style={{ aspectRatio: String(Math.max(r, 9 / 16)) }}
+                  className="relative w-full overflow-hidden rounded-2xl border border-white/10 bg-[#0a0a0a]"
+                >
+                  <div className="fusion-shimmer absolute inset-0" />
+                </div>
+                <div className="mt-1.5 h-2.5 w-2/3 rounded bg-white/[0.06]" />
+              </div>
+            ))}
+          </div>
+        ))}
       </div>
     );
   };
@@ -1596,7 +1772,7 @@ export default function FusionWallpapersApp() {
                 onClick={() => setActiveTab("profile")}
                 className="px-3.5 py-1.5 text-xs font-semibold"
               >
-                <UserIcon className="h-3.5 w-3.5" />
+                <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name} size={20} />
                 <span className="max-w-[85px] truncate">
                   {profile?.display_name || "Shadow"}
                 </span>
@@ -1741,15 +1917,7 @@ export default function FusionWallpapersApp() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <div
-                        className={`h-11 w-11 rounded-full border flex items-center justify-center text-base font-bold uppercase shrink-0 ${
-                          isLight
-                            ? "bg-[#0E2F76]/10 border-[#0E2F76]/20 text-[#0E2F76]"
-                            : "bg-white/10 border-white/20 text-white"
-                        }`}
-                      >
-                        {(profile?.display_name || user.email || "U")[0]}
-                      </div>
+                      <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name || user.email || "U"} size={44} />
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -1801,15 +1969,7 @@ export default function FusionWallpapersApp() {
                     <div className="flex items-center gap-1.5 shrink-0">
                       <GlassButton
                         typeShape="pill"
-                        onClick={() => {
-                          setSettingsFeedback(null);
-                          setEditDisplayName(
-                            profile?.display_name ||
-                              user.email?.split("@")[0] ||
-                              ""
-                          );
-                          setIsSettingsModalOpen(true);
-                        }}
+                        onClick={() => setIsAvatarPageOpen(true)}
                         className="h-8 px-3 text-[11px] font-semibold"
                       >
                         <Settings className="h-3 w-3" />
@@ -1869,11 +2029,7 @@ export default function FusionWallpapersApp() {
                     </GlassButton>
                   </GlassContainer>
                 ) : (
-                  <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                    {savedWallpapersList.map((item) =>
-                      renderWallpaperCard(item, { showRemoveSavedBtn: true })
-                    )}
-                  </div>
+                  renderMasonry(savedWallpapersList, { showRemoveSavedBtn: true })
                 )}
               </div>
             </div>
@@ -2012,9 +2168,7 @@ export default function FusionWallpapersApp() {
                   </p>
                 </GlassContainer>
               ) : (
-                <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                  {filteredWallpapers.map((item) => renderWallpaperCard(item))}
-                </div>
+                renderMasonry(filteredWallpapers)
               )}
             </div>
           )}
@@ -2226,15 +2380,7 @@ export default function FusionWallpapersApp() {
             )}
 
             {loading ? (
-              <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                {[220, 160, 200, 240, 180, 210].map((height, idx) => (
-                  <div
-                    key={idx}
-                    style={{ height: `${height}px` }}
-                    className="break-inside-avoid rounded-2xl bg-[#0c0c0e] border border-white/10 animate-pulse"
-                  />
-                ))}
-              </div>
+              renderSkeleton()
             ) : fetchError ? (
               <GlassContainer
                 type="rounded"
@@ -2247,7 +2393,7 @@ export default function FusionWallpapersApp() {
                 <GlassButton
                   typeShape="pill"
                   activeWhite={true}
-                  onClick={fetchWallpapers}
+                  onClick={() => fetchWallpapers()}
                   className="px-5 h-9 text-xs font-bold"
                 >
                   <RefreshCw className="h-3.5 w-3.5" />
@@ -2272,9 +2418,10 @@ export default function FusionWallpapersApp() {
                 </p>
               </GlassContainer>
             ) : (
-              <div className="columns-2 sm:columns-3 md:columns-4 gap-2.5 space-y-2.5">
-                {filteredWallpapers.map((item) => renderWallpaperCard(item))}
-              </div>
+              renderMasonry(
+                activeTab === "home" ? orderFeed(filteredWallpapers) : filteredWallpapers,
+                { pending: activeTab === "home" ? pendingUploads : [] }
+              )
             )}
           </div>
 
@@ -2623,6 +2770,62 @@ export default function FusionWallpapersApp() {
                 </>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= AVATAR PAGE ================= */}
+      {isAvatarPageOpen && user && (
+        <div className={`fixed inset-0 z-40 overflow-y-auto animate-in fade-in duration-200 ${isLight ? "bg-[#F4FEFF] text-[#0E2F76]" : "bg-black text-white"}`}>
+          <div className="max-w-md mx-auto px-4 pt-3 pb-12">
+            <div className="flex items-center justify-between mb-6">
+              <button
+                type="button"
+                aria-label="Back"
+                onClick={() => setIsAvatarPageOpen(false)}
+                className="h-10 w-10 rounded-full border border-white/15 bg-white/[0.06] flex items-center justify-center active:scale-95 transition-transform duration-150"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <h1 className="text-sm font-bold">Settings</h1>
+              <div className="h-10 w-10" />
+            </div>
+
+            <div className="flex flex-col items-center mb-6">
+              <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name} size={88} />
+              <p className="mt-3 text-sm font-semibold">{profile?.display_name}</p>
+            </div>
+
+            <p className="text-[11px] font-semibold opacity-70 mb-2">Choose your avatar</p>
+            <div className="grid grid-cols-4 gap-3">
+              {AVATARS.map((a) => {
+                const selected = user.user_metadata?.avatar_id === a.id;
+                return (
+                  <button
+                    key={a.id}
+                    type="button"
+                    onClick={() => handleChooseAvatar(a.id)}
+                    className={`flex items-center justify-center rounded-2xl p-2 border transition-[transform,border-color] duration-150 ease-out active:scale-95 ${
+                      selected ? "border-white" : "border-white/10"
+                    }`}
+                  >
+                    <AvatarBadge id={a.id} size={52} />
+                  </button>
+                );
+              })}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setSettingsFeedback(null);
+                setEditDisplayName(profile?.display_name || user.email?.split("@")[0] || "");
+                setIsSettingsModalOpen(true);
+              }}
+              className="mt-8 w-full h-12 rounded-2xl border border-white/10 bg-white/[0.06] text-xs font-semibold active:scale-[0.98] transition-transform duration-150"
+            >
+              Change name or password
+            </button>
           </div>
         </div>
       )}
