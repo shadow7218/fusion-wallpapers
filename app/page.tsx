@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import { User } from "@supabase/supabase-js";
 import {
@@ -50,6 +51,7 @@ import {
 import { animeCategories } from "../config/animeCategories";
 import { img } from "@/lib/img";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
+import OAuthButtons from "@/components/OAuthButtons";
 import {
   GlassContainer,
   GlassButton,
@@ -193,6 +195,7 @@ function buildUpdatedTags(
 }
 
 export default function FusionWallpapersApp() {
+  const router = useRouter();
   const supabase = useMemo(() => createClient(), []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
@@ -203,6 +206,7 @@ export default function FusionWallpapersApp() {
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   const [theme, setTheme] = useState<"dark" | "light">("dark");
+  const themeLoaded = useRef(false);
 
   const [curationOverrides, setCurationOverrides] = useState<
     Record<string, LocalCurationOverride>
@@ -210,7 +214,6 @@ export default function FusionWallpapersApp() {
 
   const [imageRatios, setImageRatios] = useState<Record<string, number>>({});
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
-  const [isAvatarPageOpen, setIsAvatarPageOpen] = useState<boolean>(false);
   const [colCount, setColCount] = useState<number>(2);
   const [lastSkel, setLastSkel] = useState<number[]>([0.56, 1.5, 0.75, 0.56, 1.2, 0.75]);
   const sessionSeed = useRef<number>(Math.random());
@@ -317,6 +320,12 @@ export default function FusionWallpapersApp() {
   const isLight = theme === "light";
 
   useEffect(() => {
+    const saved = localStorage.getItem("fusion-theme");
+    if (saved === "light" || saved === "dark") setTheme(saved);
+    themeLoaded.current = true;
+  }, []);
+
+  useEffect(() => {
     if (typeof window === "undefined") return;
     try {
       const savedOverrides = localStorage.getItem("fusion-curation-overrides");
@@ -381,6 +390,7 @@ export default function FusionWallpapersApp() {
       htmlEl.classList.remove("theme-light");
       bodyEl.classList.remove("theme-light");
     }
+    if (themeLoaded.current) localStorage.setItem("fusion-theme", theme);
   }, [theme]);
 
   const toggleTheme = () => {
@@ -743,6 +753,15 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  const handleOAuthSignIn = async (provider: "google" | "apple") => {
+    setAuthError(null);
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: `${window.location.origin}/` },
+    });
+    if (error) setAuthError(error.message);
+  };
+
   const handleSignOut = async () => {
     await supabase.auth.signOut();
     setIsSettingsModalOpen(false);
@@ -968,12 +987,6 @@ export default function FusionWallpapersApp() {
       }
       return next;
     });
-  };
-
-  const handleChooseAvatar = async (avatarId: string) => {
-    if (!user) return;
-    setUser({ ...user, user_metadata: { ...user.user_metadata, avatar_id: avatarId } } as User);
-    await supabase.auth.updateUser({ data: { avatar_id: avatarId } });
   };
 
   const handleAdminUpload = async (e: React.FormEvent) => {
@@ -1344,63 +1357,38 @@ export default function FusionWallpapersApp() {
   };
 
   const renderOfficialSocialsSection = () => (
-    <GlassContainer
-      type="rounded"
-      borderRadius={24}
-      tintOpacity={0.14}
-      className="p-4 h-full flex flex-col justify-center"
-    >
-      <div className="space-y-2 w-full">
-        {OFFICIAL_FUSION_SOCIALS.map((social) => (
+    <>
+      {OFFICIAL_FUSION_SOCIALS.map((social) => (
+        <GlassContainer
+          key={social.id}
+          type="rounded"
+          borderRadius={26}
+          tintOpacity={0.14}
+          className="p-3.5 w-full h-full flex items-center"
+        >
           <a
-            key={social.id}
             href={social.url}
             target="_blank"
             rel="noopener noreferrer"
-            className={`flex items-center justify-between gap-3 w-full rounded-2xl px-3.5 py-2 transition active:scale-[0.98] border ${
-              isLight
-                ? "bg-[#0E2F76]/[0.04] hover:bg-[#0E2F76]/[0.08] border-[#0E2F76]/15"
-                : "bg-white/[0.04] hover:bg-white/[0.08] border-white/10"
-            }`}
+            className="flex w-full items-center justify-between gap-3 transition-transform duration-150 active:scale-[0.99]"
           >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="h-9 w-9 rounded-xl overflow-hidden border border-white/20 shrink-0 bg-black">
-                <img
-                  src="/logo.webp"
-                  alt={social.name}
-                  className="h-full w-full object-cover"
-                />
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black">
+                <img src="/logo.webp" alt={social.name} className="h-full w-full object-cover" />
               </div>
               <div className="min-w-0">
-                <p
-                  className={`text-xs sm:text-sm font-bold truncate ${
-                    isLight ? "text-[#0E2F76]" : "text-white"
-                  }`}
-                >
-                  {social.name}
-                </p>
-                <p
-                  className={`text-[11px] truncate ${
-                    isLight ? "text-[#0E2F76]/65" : "text-white/55"
-                  }`}
-                >
-                  {social.handle}
-                </p>
+                <p className={`truncate text-sm font-bold ${isLight ? "text-[#0E2F76]" : "text-white"}`}>{social.name}</p>
+                <p className={`truncate text-[11px] ${isLight ? "text-[#0E2F76]/65" : "text-white/55"}`}>{social.handle}</p>
               </div>
             </div>
-
-            <span
-              className={`shrink-0 inline-flex items-center gap-1.5 h-8 px-3.5 rounded-full text-[11px] font-bold shadow-sm ${
-                isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black"
-              }`}
-            >
-              <span>{social.cta}</span>
+            <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-bold ${isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black"}`}>
+              {social.cta}
               <ExternalLink className="h-3 w-3" />
             </span>
           </a>
-        ))}
-      </div>
-    </GlassContainer>
+        </GlassContainer>
+      ))}
+    </>
   );
 
   const renderBuiltByFusionFooter = () => (
@@ -1765,7 +1753,18 @@ export default function FusionWallpapersApp() {
               </GlassButton>
             )}
 
-            {user ? (
+            {user && activeTab === "profile" ? (
+              <GlassButton
+                typeShape="circle"
+                size={34}
+                tintOpacity={0.14}
+                aria-label="Open settings"
+                onClick={() => router.push("/settings")}
+                className="shrink-0"
+              >
+                <Settings className={`h-4 w-4 ${isLight ? "text-[#0E2F76]" : "text-white"}`} />
+              </GlassButton>
+            ) : user ? (
               <GlassButton
                 typeShape="pill"
                 tintOpacity={0.14}
@@ -1964,24 +1963,6 @@ export default function FusionWallpapersApp() {
                           </button>
                         </div>
                       </div>
-                    </div>
-
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <GlassButton
-                        typeShape="pill"
-                        onClick={() => setIsAvatarPageOpen(true)}
-                        className="h-8 px-3 text-[11px] font-semibold"
-                      >
-                        <Settings className="h-3 w-3" />
-                        <span>Settings</span>
-                      </GlassButton>
-                      <GlassButton
-                        typeShape="pill"
-                        onClick={handleSignOut}
-                        className="h-8 px-3 text-[11px] font-semibold text-red-400"
-                      >
-                        <LogOut className="h-3 w-3" />
-                      </GlassButton>
                     </div>
                   </div>
                 </GlassContainer>
@@ -2774,62 +2755,6 @@ export default function FusionWallpapersApp() {
         </div>
       )}
 
-      {/* ================= AVATAR PAGE ================= */}
-      {isAvatarPageOpen && user && (
-        <div className={`fixed inset-0 z-40 overflow-y-auto animate-in fade-in duration-200 ${isLight ? "bg-[#F4FEFF] text-[#0E2F76]" : "bg-black text-white"}`}>
-          <div className="max-w-md mx-auto px-4 pt-3 pb-12">
-            <div className="flex items-center justify-between mb-6">
-              <button
-                type="button"
-                aria-label="Back"
-                onClick={() => setIsAvatarPageOpen(false)}
-                className="h-10 w-10 rounded-full border border-white/15 bg-white/[0.06] flex items-center justify-center active:scale-95 transition-transform duration-150"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <h1 className="text-sm font-bold">Settings</h1>
-              <div className="h-10 w-10" />
-            </div>
-
-            <div className="flex flex-col items-center mb-6">
-              <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name} size={88} />
-              <p className="mt-3 text-sm font-semibold">{profile?.display_name}</p>
-            </div>
-
-            <p className="text-[11px] font-semibold opacity-70 mb-2">Choose your avatar</p>
-            <div className="grid grid-cols-4 gap-3">
-              {AVATARS.map((a) => {
-                const selected = user.user_metadata?.avatar_id === a.id;
-                return (
-                  <button
-                    key={a.id}
-                    type="button"
-                    onClick={() => handleChooseAvatar(a.id)}
-                    className={`flex items-center justify-center rounded-2xl p-2 border transition-[transform,border-color] duration-150 ease-out active:scale-95 ${
-                      selected ? "border-white" : "border-white/10"
-                    }`}
-                  >
-                    <AvatarBadge id={a.id} size={52} />
-                  </button>
-                );
-              })}
-            </div>
-
-            <button
-              type="button"
-              onClick={() => {
-                setSettingsFeedback(null);
-                setEditDisplayName(profile?.display_name || user.email?.split("@")[0] || "");
-                setIsSettingsModalOpen(true);
-              }}
-              className="mt-8 w-full h-12 rounded-2xl border border-white/10 bg-white/[0.06] text-xs font-semibold active:scale-[0.98] transition-transform duration-150"
-            >
-              Change name or password
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* ================= AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
         <DialogContent
@@ -2901,6 +2826,13 @@ export default function FusionWallpapersApp() {
                 Create Account
               </button>
             </div>
+          )}
+
+          {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
+            <OAuthButtons
+              onGoogle={() => handleOAuthSignIn("google")}
+              onApple={() => handleOAuthSignIn("apple")}
+            />
           )}
 
           {authStep === "SIGN_IN" && (
