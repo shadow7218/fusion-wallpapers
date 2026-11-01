@@ -1,4 +1,9 @@
-export const animeCategories = [
+export const animeCategories: {
+  id: string;
+  name: string;
+  fallbackBanner: string;
+  showOnHome?: boolean;
+}[] = [
   {
     id: "naruto",
     name: "Naruto",
@@ -28,5 +33,11 @@ export const animeCategories = [
     id: "chainsaw-man",
     name: "Chainsaw Man",
     fallbackBanner: "https://images.unsplash.com/photo-1618331835717-801e976710b2?q=80&w=1000&auto=format&fit=crop",
+  },
+  {
+    id: "jujutsu-kaisen",
+    name: "Jujutsu Kaisen",
+    showOnHome: false,
+    fallbackBanner: "https://images.unsplash.com/photo-1614583224978-f05ce51ef5fa?q=80&w=1000&auto=format&fit=crop",
   },
 ];
