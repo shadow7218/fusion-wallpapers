@@ -78,7 +78,7 @@ body {
   to { transform: translateX(300%); }
 }
 .fusion-shimmer {
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.14), transparent);
   animation: fusion-shimmer 1.2s ease-in-out infinite;
 }
 .fusion-bar {
