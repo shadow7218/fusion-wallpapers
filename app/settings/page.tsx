@@ -7,7 +7,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft, Moon, Sun, Pencil, User as UserIcon, Lock, Bell, ShieldCheck,
   Link2, Globe, Waves, LogOut, Trash2, AlertTriangle, ChevronRight,
-  Loader2, Apple, Palette, Settings as SettingsIcon,
+  Loader2, Palette, Settings as SettingsIcon,
 } from "lucide-react";
 import { createClient } from "@/utils/supabase/client";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
@@ -170,7 +170,7 @@ export default function SettingsPage() {
   };
 
   // Linking needs "Allow manual linking" enabled in the Supabase dashboard.
-  const linkProvider = async (provider: "google" | "apple") => {
+  const linkProvider = async (provider: "google") => {
     const { error } = await supabase.auth.linkIdentity({
       provider,
       options: { redirectTo: `${window.location.origin}/settings` },
@@ -316,7 +316,6 @@ export default function SettingsPage() {
             {open === "privacy" && (
               <p className="px-4 pb-4 text-xs" style={{ color: "var(--s-muted)" }}>
                 Your email is masked on your profile by default and is never shown on wallpapers you save.
-                {/* TODO: replace with real privacy options (or link to your privacy page). */}
               </p>
             )}
           </div>
@@ -329,11 +328,6 @@ export default function SettingsPage() {
               {!providers.includes("google") && (
                 <button type="button" onClick={() => linkProvider("google")} className="s-btn-ghost">Link Google Account</button>
               )}
-              {!providers.includes("apple") && (
-                <button type="button" onClick={() => linkProvider("apple")} className="s-btn-ghost">
-                  <Apple className="h-3.5 w-3.5" /> Link Apple Account
-                </button>
-              )}
             </div>
           </div>
         </div>
@@ -342,7 +336,6 @@ export default function SettingsPage() {
         <Title icon={Palette}>App Preferences</Title>
         <div className="s-card">
           <div className="s-item">
-            {/* TODO: wire up a language picker if you add more languages. */}
             <Row icon={Globe} label="Language" right={<span className="text-sm" style={{ color: "var(--s-muted)" }}>English</span>} />
           </div>
           <div className="s-item">
