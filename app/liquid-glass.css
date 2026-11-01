@@ -187,3 +187,53 @@
 .theme-light .glass-active-white .glass-button-text {
   color: #ffffff !important;
 }
+
+/* ===== Bottom nav only: strong liquid glass ===== */
+.fusion-nav-glass {
+  background:
+    radial-gradient(120% 140% at 15% 0%, rgba(255,255,255,0.24), transparent 55%),
+    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.03) 50%, rgba(0,0,0,0.10)),
+    rgba(20, 20, 24, 0.08) !important;
+  backdrop-filter: blur(9px) saturate(280%) brightness(1.3) contrast(1.05) !important;
+  -webkit-backdrop-filter: blur(9px) saturate(280%) brightness(1.3) contrast(1.05) !important;
+  border: 1px solid rgba(255,255,255,0.22) !important;
+  box-shadow:
+    0 14px 34px rgba(0,0,0,0.6),
+    inset 0 1.5px 1px rgba(255,255,255,0.55),
+    inset 0 -1.5px 1px rgba(255,255,255,0.22),
+    inset 0 0 22px rgba(255,255,255,0.10),
+    inset 0 -12px 20px rgba(0,0,0,0.22) !important;
+}
+
+.fusion-nav-glass::before {
+  background: linear-gradient(
+    135deg,
+    rgba(255,255,255,0.85) 0%,
+    rgba(255,255,255,0.10) 26%,
+    rgba(255,255,255,0.03) 52%,
+    rgba(255,255,255,0.14) 78%,
+    rgba(255,255,255,0.60) 100%
+  );
+}
+
+.fusion-nav-glass::after {
+  content: "";
+  display: block;
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(110% 90% at 22% 0%, rgba(255,255,255,0.20), transparent 55%);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* selected tab: soft glass pill instead of solid white */
+.fusion-nav-glass .glass-active-white {
+  background: linear-gradient(180deg, rgba(255,255,255,0.34), rgba(255,255,255,0.12)) !important;
+  color: #ffffff !important;
+  border-color: rgba(255,255,255,0.40) !important;
+  box-shadow:
+    inset 0 1.5px 1px rgba(255,255,255,0.65),
+    inset 0 -8px 14px rgba(0,0,0,0.18),
+    0 4px 14px rgba(0,0,0,0.35) !important;
+}
