@@ -271,9 +271,20 @@ export default function FusionWallpapersApp() {
   const [uploadTitle, setUploadTitle] = useState<string>("");
   const [uploadCategory, setUploadCategory] = useState<string>("none");
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
   const [uploadShowInHero, setUploadShowInHero] = useState<boolean>(false);
   const [uploadTop10Rank, setUploadTop10Rank] = useState<string>("none");
   const [uploading, setUploading] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (!uploadFile) {
+      setUploadPreview(null);
+      return;
+    }
+    const url = URL.createObjectURL(uploadFile);
+    setUploadPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [uploadFile]);
 
   // ADMIN EDIT STATES
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -1364,9 +1375,10 @@ export default function FusionWallpapersApp() {
             isLight
               ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15 shadow-[0_6px_16px_rgba(14,47,118,0.08)]"
               : "bg-[#0a0a0a] border-white/10"
-          } ${isTall ? "aspect-[9/16]" : ""}`}
+          } ${isTall ? "aspect-[9/16]" : ""} ${imageRatios[item.id] === undefined ? "min-h-[140px]" : ""}`}
           onContextMenu={(e) => e.preventDefault()}
         >
+          {imageRatios[item.id] === undefined && <div className="fusion-shimmer absolute inset-0" />}
           <img
             src={img(item.image_url, 500)}
             alt={item.title}
@@ -1380,7 +1392,7 @@ export default function FusionWallpapersApp() {
               }));
             }}
             onContextMenu={(e) => e.preventDefault()}
-            className={`w-full block pointer-events-none select-none ${
+            className={`w-full block pointer-events-none select-none transition-opacity duration-300 ${imageRatios[item.id] === undefined ? "opacity-0" : "opacity-100"} ${
               isTall ? "h-full object-cover" : "h-auto object-cover"
             }`}
           />
@@ -1455,7 +1467,7 @@ export default function FusionWallpapersApp() {
               ? "rgba(255, 255, 255, 0.92)"
               : "rgba(12, 12, 16, 0.78)",
           }}
-          className="fixed z-50 w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.65)]"
+          className="fixed z-[70] w-40 p-1.5 animate-in fade-in zoom-in-95 duration-150 shadow-[0_20px_50px_rgba(0,0,0,0.65)]"
           onClick={(e) => e.stopPropagation()}
         >
           <button
@@ -1679,26 +1691,36 @@ export default function FusionWallpapersApp() {
                 (pillName) => {
                   const isActive = selectedPillCategory === pillName;
                   return (
-                    <GlassButton
+                    <button
                       key={pillName}
-                      typeShape="pill"
-                      activeWhite={isActive}
-                      tintOpacity={0.12}
+                      type="button"
                       onClick={() => {
                         setSelectedPillCategory(pillName);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className="px-4 py-1.5 text-[11px] font-semibold shrink-0"
+                      className={`shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] ${
+                        isActive
+                          ? isLight
+                            ? "bg-[#0E2F76] text-white border-transparent"
+                            : "bg-white text-black border-transparent"
+                          : isLight
+                          ? "bg-[#0E2F76]/10 text-[#0E2F76] border-[#0E2F76]/15"
+                          : "bg-white/[0.07] text-white/85 border-white/10"
+                      }`}
                     >
                       {pillName}
-                    </GlassButton>
+                    </button>
                   );
                 }
               )}
               {isAdmin && (
-                <GlassButton typeShape="pill" onClick={backfillDevices} className="px-4 py-1.5 text-[11px] font-semibold shrink-0">
+                <button
+                  type="button"
+                  onClick={backfillDevices}
+                  className="shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
+                >
                   Tag old
-                </GlassButton>
+                </button>
               )}
             </div>
           )}
@@ -2269,12 +2291,12 @@ export default function FusionWallpapersApp() {
           className="relative rounded-full p-1.5"
           style={{
             background:
-              "linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02) 55%, rgba(0,0,0,0.18)), rgba(18,18,20,0.22)",
-            backdropFilter: "blur(16px) saturate(145%) brightness(1.05)",
-            WebkitBackdropFilter: "blur(16px) saturate(145%) brightness(1.05)",
-            border: "1px solid rgba(255,255,255,0.16)",
+              "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)), rgba(20,20,22,0.30)",
+            backdropFilter: "blur(18px) saturate(125%)",
+            WebkitBackdropFilter: "blur(18px) saturate(125%)",
+            border: "1px solid rgba(255,255,255,0.12)",
             boxShadow:
-              "0 12px 28px rgba(0,0,0,0.6), inset 0 1px 1px rgba(255,255,255,0.4), inset 0 -1px 1px rgba(255,255,255,0.12), inset 0 0 12px rgba(255,255,255,0.05)",
+              "0 10px 26px rgba(0,0,0,0.55), inset 0 1px 0 rgba(255,255,255,0.28), inset 0 -1px 0 rgba(255,255,255,0.06)",
           }}
         >
           <div className="flex items-center justify-between relative">
@@ -3171,6 +3193,26 @@ export default function FusionWallpapersApp() {
                 className="bg-black/70 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-lg file:px-2 file:py-1 file:mr-2 file:text-[11px] file:font-bold rounded-xl h-10 py-1 text-xs"
               />
             </div>
+
+            {uploadPreview && (
+              <div className="relative mx-auto mt-2 w-40 overflow-hidden rounded-2xl border border-white/15 bg-[#0a0a0a]">
+                <img
+                  src={uploadPreview}
+                  alt="Upload preview"
+                  className={`block h-auto max-h-64 w-full object-contain transition-[opacity,filter] duration-300 ease-out ${
+                    uploading ? "opacity-60 blur-[1px]" : "opacity-100"
+                  }`}
+                />
+                {uploading && (
+                  <>
+                    <div className="fusion-shimmer pointer-events-none absolute inset-0" />
+                    <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/10">
+                      <div className="fusion-bar h-full w-1/3 rounded-full bg-white/80" />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             <GlassButton
               type="submit"
