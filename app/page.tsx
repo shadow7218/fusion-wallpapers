@@ -48,6 +48,7 @@ import {
 } from "@/components/ui/dialog";
 
 import { animeCategories } from "../config/animeCategories";
+import { img } from "@/lib/img";
 import {
   GlassContainer,
   GlassButton,
@@ -1319,7 +1320,7 @@ export default function FusionWallpapersApp() {
           onContextMenu={(e) => e.preventDefault()}
         >
           <img
-            src={item.image_url}
+            src={img(item.image_url, 500)}
             alt={item.title}
             loading="lazy"
             draggable={false}
@@ -1875,7 +1876,7 @@ export default function FusionWallpapersApp() {
                   if (!banner && catWallpapers.length > 0)
                     banner = catWallpapers[catWallpapers.length - 1];
                   const bannerUrl = banner
-                    ? banner.image_url
+                    ? img(banner.image_url, 600)
                     : cat.fallbackBanner;
 
                   return (
@@ -1970,7 +1971,7 @@ export default function FusionWallpapersApp() {
                         onClick={() => openWallpaperDetail(hero)}
                       >
                         <img
-                          src={hero.image_url}
+                          src={img(hero.image_url, 900)}
                           alt={hero.title}
                           className="w-full h-full object-cover"
                         />
@@ -2112,7 +2113,7 @@ export default function FusionWallpapersApp() {
                             }`}
                           >
                             <img
-                              src={rankedItem.image_url}
+                              src={img(rankedItem.image_url, 400)}
                               alt={rankedItem.title}
                               loading="lazy"
                               className="w-full h-full object-cover"
@@ -2398,7 +2399,7 @@ export default function FusionWallpapersApp() {
               onContextMenu={(e) => e.preventDefault()}
             >
               <img
-                src={selectedWallpaper.image_url}
+                src={img(selectedWallpaper.image_url, 1200)}
                 alt={selectedWallpaper.title}
                 draggable={false}
                 onContextMenu={(e) => e.preventDefault()}
