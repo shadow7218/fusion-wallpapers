@@ -215,6 +215,7 @@ export default function FusionWallpapersApp() {
     null
   );
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
+  const [detailSrc, setDetailSrc] = useState<string | null>(null);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
   const [activeMenu, setActiveMenu] = useState<{
@@ -431,6 +432,18 @@ export default function FusionWallpapersApp() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectedWallpaper]);
+  
+  useEffect(() => {
+  setDetailSrc(null);
+  if (!selectedWallpaper) return;
+  const full = img(selectedWallpaper.image_url, 1200);
+  const loader = new Image();
+  loader.onload = () => setDetailSrc(full);
+  loader.src = full;
+  return () => {
+    loader.onload = null;
+  };
+}, [selectedWallpaper]);
 
   const openWallpaperDetail = (wallpaper: Wallpaper) => {
     setActiveMenu(null);
@@ -2395,11 +2408,13 @@ export default function FusionWallpapersApp() {
 
             {/* WALLPAPER PREVIEW BOX */}
             <div
-              className="relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3"
-              onContextMenu={(e) => e.preventDefault()}
+              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 ${
+               detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
+              }`}
             >
               <img
-                src={img(selectedWallpaper.image_url, 1200)}
+                src={detailSrc ?? img(selectedWallpaper.image_url, 500)}
+                decoding="async"
                 alt={selectedWallpaper.title}
                 draggable={false}
                 onContextMenu={(e) => e.preventDefault()}
