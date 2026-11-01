@@ -2226,17 +2226,17 @@ export default function FusionWallpapersApp() {
         className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
         <div
-  className="relative rounded-full p-1.5"
-  style={{
-    background:
-      "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.03) 55%, rgba(0,0,0,0.10)), rgba(24,24,28,0.10)",
-    backdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
-    WebkitBackdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
-    border: "1px solid rgba(255,255,255,0.25)",
-    boxShadow:
-      "0 14px 34px rgba(0,0,0,0.6), inset 0 1.5px 1px rgba(255,255,255,0.6), inset 0 -1.5px 1px rgba(255,255,255,0.25), inset 0 0 22px rgba(255,255,255,0.10)",
-  }}>
->
+         className="relative rounded-full p-1.5"
+         style={{
+          background:
+           "linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.03) 55%, rgba(0,0,0,0.10)), rgba(24,24,28,0.10)",
+          backdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
+          WebkitBackdropFilter: "blur(14px) saturate(260%) brightness(1.25)",
+          border: "1px solid rgba(255,255,255,0.25)",
+          boxShadow:
+           "0 14px 34px rgba(0,0,0,0.6), inset 0 1.5px 1px rgba(255,255,255,0.6), inset 0 -1.5px 1px rgba(255,255,255,0.25), inset 0 0 22px rgba(255,255,255,0.10)",
+        }}
+       >
           <div className="flex items-center justify-between relative">
             <button
               type="button"
