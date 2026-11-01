@@ -2235,7 +2235,7 @@ export default function FusionWallpapersApp() {
     border: "1px solid rgba(255,255,255,0.25)",
     boxShadow:
       "0 14px 34px rgba(0,0,0,0.6), inset 0 1.5px 1px rgba(255,255,255,0.6), inset 0 -1.5px 1px rgba(255,255,255,0.25), inset 0 0 22px rgba(255,255,255,0.10)",
-  }}
+  }}>
 >
           <div className="flex items-center justify-between relative">
             <button
