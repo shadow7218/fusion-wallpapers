@@ -68,3 +68,22 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+@keyframes fusion-shimmer {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(100%); }
+}
+@keyframes fusion-bar {
+  from { transform: translateX(-100%); }
+  to { transform: translateX(300%); }
+}
+.fusion-shimmer {
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.16), transparent);
+  animation: fusion-shimmer 1.2s ease-in-out infinite;
+}
+.fusion-bar {
+  animation: fusion-bar 1.1s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .fusion-shimmer, .fusion-bar { animation: none; }
+}
