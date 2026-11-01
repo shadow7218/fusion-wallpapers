@@ -240,7 +240,7 @@ export default function FusionWallpapersApp() {
     null
   );
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
-  const [detailSrc, setDetailSrc] = useState<string | null>(null);
+  const [detailSrc, setDetailSrc] = useState<{ id: string; src: string } | null>(null);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
 
   const [activeMenu, setActiveMenu] = useState<{
@@ -521,9 +521,10 @@ export default function FusionWallpapersApp() {
   useEffect(() => {
     setDetailSrc(null);
     if (!selectedWallpaper) return;
+    const wid = selectedWallpaper.id;
     const full = img(selectedWallpaper.image_url, 1200);
     const loader = new Image();
-    loader.onload = () => setDetailSrc(full);
+    loader.onload = () => setDetailSrc({ id: wid, src: full });
     loader.src = full;
     return () => {
       loader.onload = null;
@@ -538,8 +539,7 @@ export default function FusionWallpapersApp() {
     setRelatedVisibleCount(6);
     setDownloadStatus(null);
     setIsExpanded(false);
-    if (detailScrollRef.current)
-      detailScrollRef.current.scrollTo({ top: 0, behavior: "smooth" });
+    if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0 });
   };
 
   const closeWallpaperDetail = () => {
@@ -1793,25 +1793,6 @@ export default function FusionWallpapersApp() {
                 <span>Sign In</span>
               </GlassButton>
             )}
-
-            {activeTab === "profile" && (
-              <GlassButton
-                typeShape="circle"
-                size={34}
-                tintOpacity={0.14}
-                aria-label={
-                  isLight ? "Switch to dark theme" : "Switch to light theme"
-                }
-                onClick={toggleTheme}
-                className="shrink-0"
-              >
-                {isLight ? (
-                  <Sun className="h-4 w-4 text-[#0E2F76]" />
-                ) : (
-                  <Moon className="h-4 w-4 text-white" />
-                )}
-              </GlassButton>
-            )}
           </div>
         </div>
       </header>
@@ -1964,6 +1945,17 @@ export default function FusionWallpapersApp() {
                         </div>
                       </div>
                     </div>
+
+                    <GlassButton
+                      typeShape="circle"
+                      size={38}
+                      tintOpacity={0.14}
+                      aria-label="Log out"
+                      onClick={handleSignOut}
+                      className="shrink-0"
+                    >
+                      <LogOut className={`h-4 w-4 ${isLight ? "text-[#0E2F76]" : "text-white"}`} />
+                    </GlassButton>
                   </div>
                 </GlassContainer>
 
@@ -2603,12 +2595,17 @@ export default function FusionWallpapersApp() {
 
             {/* WALLPAPER PREVIEW BOX */}
             <div
-              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 ${
+              key={selectedWallpaper.id}
+              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 animate-in fade-in duration-200 ${
                 detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
               }`}
             >
               <img
-                src={detailSrc ?? img(selectedWallpaper.image_url, 500)}
+                src={
+                  detailSrc && detailSrc.id === selectedWallpaper.id
+                    ? detailSrc.src
+                    : img(selectedWallpaper.image_url, 500)
+                }
                 decoding="async"
                 alt={selectedWallpaper.title}
                 draggable={false}
@@ -2730,10 +2727,8 @@ export default function FusionWallpapersApp() {
                 </p>
               ) : (
                 <>
-                  <div className="columns-2 sm:columns-3 gap-2.5 space-y-2.5">
-                    {relatedWallpapers
-                      .slice(0, relatedVisibleCount)
-                      .map((rel) => renderWallpaperCard(rel))}
+                  <div className="mx-2.5">
+                    {renderMasonry(relatedWallpapers.slice(0, relatedVisibleCount))}
                   </div>
                   {relatedVisibleCount < relatedWallpapers.length && (
                     <div className="mt-4 text-center">
