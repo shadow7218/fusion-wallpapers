@@ -222,3 +222,37 @@
   background: linear-gradient(155deg, rgba(14,47,118,0.28), rgba(14,47,118,0.06) 40%, rgba(14,47,118,0.04) 65%, rgba(14,47,118,0.18));
 }
 .theme-light .glass-active-white { background: #0E2F76 !important; }
+
+/* ===== Light theme polish ===== */
+.theme-light .glass-container {
+  background: rgba(255, 255, 255, 0.94);
+  border-color: rgba(14, 47, 118, 0.22);
+  box-shadow: 0 1px 2px rgba(14, 47, 118, 0.10), 0 8px 24px rgba(14, 47, 118, 0.12);
+}
+.theme-light .glass-button.glass-container {
+  background: linear-gradient(180deg, #ffffff, #E8F0FB);
+  border-color: rgba(14, 47, 118, 0.28);
+  color: #0E2F76;
+  box-shadow: 0 1px 2px rgba(14, 47, 118, 0.16), 0 4px 10px rgba(14, 47, 118, 0.10);
+}
+.theme-light .glass-button.glass-container::before { display: none; }
+.theme-light .glass-button-text { color: #0E2F76; }
+.theme-light .glass-active-white {
+  background: #0E2F76 !important;
+  border-color: #0E2F76 !important;
+  box-shadow: 0 6px 16px rgba(14, 47, 118, 0.30) !important;
+}
+.theme-light .glass-active-white,
+.theme-light .glass-active-white * { color: #ffffff !important; }
+
+/* Bottom nav in light mode */
+.theme-light .fusion-nav {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border-color: rgba(14, 47, 118, 0.22) !important;
+  box-shadow: 0 10px 26px rgba(14, 47, 118, 0.18) !important;
+}
+.theme-light .fusion-nav button,
+.theme-light .fusion-nav span,
+.theme-light .fusion-nav svg { color: #0E2F76; }
+.theme-light .fusion-nav .glass-active-white span,
+.theme-light .fusion-nav .glass-active-white svg { color: #ffffff; }
