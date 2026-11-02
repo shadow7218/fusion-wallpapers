@@ -863,7 +863,7 @@ export default function FusionWallpapersApp() {
 
     try {
       let fileBlob: Blob | null = null;
-      if (wallpaper.storage_path) {
+      if (wallpaper.storage_path && !wallpaper.image_url.includes("res.cloudinary.com")) {
         const { data, error } = await supabase.storage
           .from("wallpapers")
           .download(wallpaper.storage_path);
@@ -1011,6 +1011,487 @@ export default function FusionWallpapersApp() {
       return next;
     });
   };
+
+  const measureRatio = (url: string) =>
+    new Promise<number>((resolve) => {
+      const im = new Image();
+      im.onload = () => resolve(im.naturalWidth / im.naturalHeight || 0.75);
+      im.onerror = () => resolve(0.75);
+      im.src = url;
+    });
+
+  // Cloudinary's free plan accepts images up to ~10 MB, so big files are
+  // re-saved as high-quality JPEG (same resolution) until they fit.
+  const fitUnder = async (file: File, maxBytes: number): Promise<Blob> => {
+    if (file.size <= maxBytes) return file;
+    const bmp = await createImageBitmap(file);
+    const canvas = document.createElement("canvas");
+    canvas.width = bmp.width;
+    canvas.height = bmp.height;
+    canvas.getContext("2d")!.drawImage(bmp, 0, 0);
+    bmp.close();
+    for (const q of [0.92, 0.88, 0.84, 0.8, 0.75, 0.7]) {
+      const blob = await new Promise<Blob | null>((res) =>
+        canvas.toBlob(res, "image/jpeg", q)
+      );
+      if (blob && blob.size <= maxBytes) return blob;
+    }
+    throw new Error("Image is too large even after compression.");
+  };
+
+  const moveUpload = (i: number, dir: -1 | 1) =>
+    setUploadFiles((prev) => {
+      const j = i + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const c = [...prev];
+      [c[i], c[j]] = [c[j], c[i]];
+      return c;
+    });
+
+  const removeUpload = (id: string) =>
+    setUploadFiles((prev) => {
+      const f = prev.find((x) => x.id === id);
+      if (f) URL.revokeObjectURL(f.url);
+      return prev.filter((x) => x.id !== id);
+    });
+
+  const handleAdminUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || uploadFiles.length === 0 || !uploadTitle.trim()) return;
+
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    if (!cloudName || !uploadPreset) {
+      alert("Cloudinary is not set up yet (missing environment variables).");
+      return;
+    }
+
+    const files = uploadFiles;
+    const title = uploadTitle.trim();
+    const category = uploadCategory;
+    const showHero = uploadShowInHero;
+    const rank = uploadTop10Rank;
+    const batchId =
+      files.length > 1 ? Math.random().toString(36).slice(2, 10) : null;
+
+    const coverRatio = await measureRatio(files[0].url);
+    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const label = (n: number) =>
+      files.length > 1 ? `${title} (${n}/${files.length})` : title;
+    setPendingUploads((prev) => [
+      { id: pendingId, previewUrl: files[0].url, ratio: coverRatio, title: label(1) },
+      ...prev,
+    ]);
+
+    setUploadTitle("");
+    setUploadFiles([]);
+    setUploadShowInHero(false);
+    setUploadTop10Rank("none");
+    setIsUploadModalOpen(false);
+    setActiveTab("home");
+    setSelectedPillCategory("All");
+    window.scrollTo({ top: 0, behavior: "smooth" });
+
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const { file, url } = files[i];
+        setPendingUploads((prev) =>
+          prev.map((p) => (p.id === pendingId ? { ...p, title: label(i + 1) } : p))
+        );
+
+        // 1) image goes straight to Cloudinary
+        const toUpload = await fitUnder(file, 9.5 * 1024 * 1024);
+        const fd = new FormData();
+        fd.append("file", toUpload, file.name);
+        fd.append("upload_preset", uploadPreset);
+        const upRes = await fetch(
+          `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+          { method: "POST", body: fd }
+        );
+        const up = await upRes.json();
+        if (!upRes.ok) throw new Error(up?.error?.message || "Cloudinary upload failed");
+        const publicUrl: string = up.secure_url;
+        const fileName: string = up.public_id; // saved in the storage_path column
+
+        // 2) only text data goes to the database
+        let isFirst = false;
+        if (category !== "none" && i === 0) {
+          const { data: existing } = await supabase
+            .from("wallpapers")
+            .select("id")
+            .eq("category", category)
+            .limit(1);
+          isFirst = !existing || existing.length === 0;
+        }
+
+        const ratio = i === 0 ? coverRatio : await measureRatio(url);
+        const parsedRank = i === 0 && rank !== "none" ? parseInt(rank, 10) : null;
+        const tags = buildUpdatedTags([], i === 0 ? showHero : false, parsedRank);
+        tags.push(ratio >= 1 ? PC_TAG : PHONE_TAG);
+        if (batchId) tags.push(...makeBatchTags(batchId, i));
+
+        const row = {
+          title,
+          image_url: publicUrl,
+          storage_path: fileName,
+          category: category === "none" ? null : category,
+        };
+        const { data: inserted, error: dbError } = await supabase
+          .from("wallpapers")
+          .insert([{ ...row, is_banner: isFirst, tags }])
+          .select()
+          .maybeSingle();
+
+        if (dbError) {
+          const { data: fb, error: fbError } = await supabase
+            .from("wallpapers")
+            .insert([row])
+            .select()
+            .maybeSingle();
+          if (fbError) throw fbError;
+          if (fb?.id)
+            saveLocalCurationOverride(fb.id, i === 0 ? showHero : false, parsedRank);
+        } else if (inserted?.id) {
+          saveLocalCurationOverride(inserted.id, i === 0 ? showHero : false, parsedRank);
+        }
+      }
+
+      setPendingUploads((prev) => prev.filter((p) => p.id !== pendingId));
+      files.forEach((f) => URL.revokeObjectURL(f.url));
+      await fetchWallpapers(true);
+    } catch (err: any) {
+      setPendingUploads((prev) =>
+        prev.map((p) => (p.id === pendingId ? { ...p, failed: true } : p))
+      );
+      alert(`Upload failed: ${err.message}`);
+    }
+  };
+
+  const handleAdminDelete = async (
+    e: React.MouseEvent,
+    wallpaper: Wallpaper
+  ) => {
+    e.stopPropagation();
+    setActiveMenu(null);
+    if (!isAdmin) return;
+    if (!window.confirm(`Delete "${wallpaper.title}" permanently?`)) return;
+
+    try {
+      if (!wallpaper.image_url.includes("res.cloudinary.com")) {
+        await supabase.storage
+          .from("wallpapers")
+          .remove([wallpaper.storage_path]);
+      }
+      await supabase.from("wallpapers").delete().eq("id", wallpaper.id);
+      setWallpapers((prev) => prev.filter((w) => w.id !== wallpaper.id));
+      if (selectedWallpaper?.id === wallpaper.id) closeWallpaperDetail();
+    } catch (err: any) {
+      alert(`Delete failed: ${err.message}`);
+    }
+  };
+
+  const handleAdminEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!isAdmin || !selectedWallpaper || editingWallpaper) return;
+    setEditingWallpaper(true);
+
+    try {
+      const finalCat =
+        editCategorySelection === "none" ? null : editCategorySelection;
+      if (editSetAsBanner && finalCat) {
+        await supabase
+          .from("wallpapers")
+          .update({ is_banner: false })
+          .eq("category", finalCat);
+      }
+
+      const parsedRank =
+        editTop10Rank === "none" ? null : parseInt(editTop10Rank, 10);
+
+      if (parsedRank !== null) {
+        const conflicting = wallpapers.filter(
+          (w) =>
+            w.id !== selectedWallpaper.id &&
+            extractCurationFromWallpaper(w, curationOverrides).top10Rank ===
+              parsedRank
+        );
+        for (const other of conflicting) {
+          const otherCuration = extractCurationFromWallpaper(
+            other,
+            curationOverrides
+          );
+          const cleanedTags = buildUpdatedTags(
+            other.tags,
+            otherCuration.isHero,
+            null
+          );
+          await supabase
+            .from("wallpapers")
+            .update({ tags: cleanedTags })
+            .eq("id", other.id);
+        }
+      }
+
+      const updatedTags = buildUpdatedTags(
+        selectedWallpaper.tags,
+        editShowInHero,
+        parsedRank
+      );
+
+      const { error } = await supabase
+        .from("wallpapers")
+        .update({
+          category: finalCat,
+          is_banner: editSetAsBanner && finalCat !== null,
+          tags: updatedTags,
+        })
+        .eq("id", selectedWallpaper.id);
+
+      if (error) {
+        const { error: fallbackErr } = await supabase
+          .from("wallpapers")
+          .update({
+            category: finalCat,
+            is_banner: editSetAsBanner && finalCat !== null,
+          })
+          .eq("id", selectedWallpaper.id);
+        if (fallbackErr) throw fallbackErr;
+      }
+
+      saveLocalCurationOverride(
+        selectedWallpaper.id,
+        editShowInHero,
+        parsedRank
+      );
+
+      setIsEditModalOpen(false);
+      await fetchWallpapers();
+      closeWallpaperDetail();
+    } catch (err: any) {
+      alert(`Failed to update wallpaper: ${err.message}`);
+    } finally {
+      setEditingWallpaper(false);
+    }
+  };
+
+  const backfillDevices = async () => {
+    if (!isAdmin) return;
+    const todo = wallpapers.filter((w) => !getDevice(w));
+    if (!todo.length) return alert("All wallpapers are already tagged.");
+    let done = 0;
+    for (const w of todo) {
+      try {
+        const ratio = await new Promise<number>((res, rej) => {
+          const im = new Image();
+          im.onload = () => res(im.naturalWidth / im.naturalHeight);
+          im.onerror = rej;
+          im.src = img(w.image_url, 80);
+        });
+        const tags = [...(Array.isArray(w.tags) ? w.tags : []), ratio >= 1 ? PC_TAG : PHONE_TAG];
+        await supabase.from("wallpapers").update({ tags }).eq("id", w.id);
+        done++;
+      } catch {}
+    }
+    alert(`Tagged ${done} of ${todo.length}.`);
+    await fetchWallpapers();
+  };
+
+  const filteredWallpapers = useMemo(() => {
+    return wallpapers.filter((item) => {
+      if (activeTab === "saved" && !savedIds.includes(item.id)) return false;
+
+      if (
+        activeTab === "explore" &&
+        exploreView === "category" &&
+        selectedExploreCategory
+      ) {
+        if (getWallpaperCategory(item) !== selectedExploreCategory) return false;
+      }
+
+      if (activeTab === "home" && selectedPillCategory === "Phone") {
+        if (getDevice(item) !== "phone") return false;
+      } else if (activeTab === "home" && selectedPillCategory === "PC") {
+        if (getDevice(item) !== "pc") return false;
+      } else if (activeTab === "home" && selectedPillCategory !== "All") {
+        const catId = animeCategories.find((c) => c.name === selectedPillCategory)?.id;
+        if (getWallpaperCategory(item) !== catId) return false;
+      }
+
+      const q = searchQuery.trim().toLowerCase();
+      if (q) {
+        const itemCat = (getWallpaperCategory(item) || "").toLowerCase();
+        return (
+          item.title.toLowerCase().includes(q) ||
+          itemCat.includes(q) ||
+          item.storage_path.toLowerCase().includes(q)
+        );
+      }
+
+      return true;
+    });
+  }, [
+    wallpapers,
+    activeTab,
+    savedIds,
+    searchQuery,
+    exploreView,
+    selectedExploreCategory,
+    selectedPillCategory,
+  ]);
+
+  const savedWallpapersList = useMemo(
+    () => wallpapers.filter((w) => savedIds.includes(w.id)),
+    [wallpapers, savedIds]
+  );
+
+  const relatedWallpapers = useMemo(() => {
+    if (!selectedWallpaper) return [];
+    const currentCat = getWallpaperCategory(selectedWallpaper);
+    const curBatch = getBatchId(selectedWallpaper);
+    const others = wallpapers.filter(
+      (w) => w.id !== selectedWallpaper.id && (!curBatch || getBatchId(w) !== curBatch)
+    );
+    const scored = others.map((candidate) => {
+      let score = 0;
+      if (currentCat && getWallpaperCategory(candidate) === currentCat)
+        score += 10;
+      return { wallpaper: candidate, score };
+    });
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map((s) => s.wallpaper);
+  }, [wallpapers, selectedWallpaper]);
+
+  const topTenDailyWallpapers = useMemo(() => {
+    if (wallpapers.length === 0) return [];
+    const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
+
+    const pinnedByRank: Record<number, Wallpaper> = {};
+    const pinnedIds = new Set<string>();
+
+    wallpapers.forEach((w) => {
+      const { top10Rank } = extractCurationFromWallpaper(w, curationOverrides);
+      if (
+        top10Rank &&
+        top10Rank >= 1 &&
+        top10Rank <= 10 &&
+        !pinnedByRank[top10Rank]
+      ) {
+        pinnedByRank[top10Rank] = w;
+        pinnedIds.add(w.id);
+      }
+    });
+
+    const unpinned = wallpapers.filter((w) => !pinnedIds.has(w.id));
+    const scored = unpinned.map((w, idx) => {
+      const hash =
+        (w.id.charCodeAt(0) || 1) * 31 +
+        (w.id.charCodeAt(w.id.length - 1) || 1) +
+        daySeed +
+        idx;
+      const dailyScore = (w.downloads || 0) * 100 + (hash % 97);
+      return { wallpaper: w, dailyScore };
+    });
+    scored.sort((a, b) => b.dailyScore - a.dailyScore);
+
+    const result: Wallpaper[] = [];
+    let autoIdx = 0;
+    const maxCount = Math.min(10, wallpapers.length);
+
+    for (let rank = 1; rank <= maxCount; rank++) {
+      if (pinnedByRank[rank]) {
+        result.push(pinnedByRank[rank]);
+      } else if (autoIdx < scored.length) {
+        result.push(scored[autoIdx].wallpaper);
+        autoIdx++;
+      }
+    }
+
+    return result;
+  }, [wallpapers, curationOverrides]);
+
+  const handleToggleCardMenu = (
+    e: React.MouseEvent<HTMLButtonElement>,
+    item: Wallpaper
+  ) => {
+    e.stopPropagation();
+    if (activeMenu?.wallpaper.id === item.id) {
+      setActiveMenu(null);
+      return;
+    }
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const menuWidth = 160;
+    const menuApproxHeight = isAdmin ? 175 : 135;
+
+    const left = Math.min(
+      Math.max(12, rect.right - menuWidth),
+      window.innerWidth - menuWidth - 12
+    );
+
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+
+    if (spaceAbove < menuApproxHeight + 130 && spaceBelow > menuApproxHeight) {
+      setActiveMenu({
+        wallpaper: item,
+        top: rect.bottom + 6,
+        left,
+      });
+    } else {
+      setActiveMenu({
+        wallpaper: item,
+        bottom: window.innerHeight - rect.top + 6,
+        left,
+      });
+    }
+  };
+
+  const renderOfficialSocialsSection = () => (
+    <>
+      {OFFICIAL_FUSION_SOCIALS.map((social) => (
+        <GlassContainer
+          key={social.id}
+          type="rounded"
+          borderRadius={26}
+          tintOpacity={0.14}
+          className="p-3.5 w-full h-full flex items-center"
+        >
+          <a
+            href={social.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex w-full items-center justify-between gap-3 transition-transform duration-150 active:scale-[0.99]"
+          >
+            <div className="flex min-w-0 items-center gap-3">
+              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black">
+                <img src="/logo.webp" alt={social.name} className="h-full w-full object-cover" />
+              </div>
+              <div className="min-w-0">
+                <p className={`truncate text-sm font-bold ${isLight ? "text-[#0E2F76]" : "text-white"}`}>{social.name}</p>
+                <p className={`truncate text-[11px] ${isLight ? "text-[#0E2F76]/65" : "text-white/55"}`}>{social.handle}</p>
+              </div>
+            </div>
+            <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-bold ${isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black"}`}>
+              {social.cta}
+              <ExternalLink className="h-3 w-3" />
+            </span>
+          </a>
+        </GlassContainer>
+      ))}
+    </>
+  );
+
+  const renderBuiltByFusionFooter = () => (
+    <footer className="w-full pt-10 pb-6 text-center select-none">
+      <p
+        className={`text-[11px] sm:text-xs font-medium tracking-[0.18em] uppercase ${
+          isLight ? "text-[#0E2F76]/50" : "text-white/40"
+        }`}
+      >
+        Built by Fusion
+      </p>
+    </footer>
+  );
 
   const onSwipeStart = (e: React.PointerEvent) => {
     swipeStart.current = { x: e.clientX, y: e.clientY };
