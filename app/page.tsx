@@ -49,7 +49,8 @@ import {
 } from "@/components/ui/dialog";
 
 import { animeCategories } from "../config/animeCategories";
-import { img } from "@/lib/img";
+import { groupBatches, makeBatchTags, getBatchId } from "@/lib/batch";
+import { img, PREVIEW_TAG } from "@/lib/img";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
 import OAuthButtons from "@/components/OAuthButtons";
 import SlidingNav from "@/components/SlidingNav";
@@ -290,21 +291,16 @@ export default function FusionWallpapersApp() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState<boolean>(false);
   const [uploadTitle, setUploadTitle] = useState<string>("");
   const [uploadCategory, setUploadCategory] = useState<string>("none");
-  const [uploadFile, setUploadFile] = useState<File | null>(null);
-  const [uploadPreview, setUploadPreview] = useState<string | null>(null);
+  const [uploadFiles, setUploadFiles] = useState<{ id: string; file: File; url: string }[]>([]);
+  const [batchIndex, setBatchIndex] = useState<Record<string, number>>({});
+  const [detailSlides, setDetailSlides] = useState<Wallpaper[] | null>(null);
+  const [menuSlides, setMenuSlides] = useState<Wallpaper[] | null>(null);
+  const [downloadChoice, setDownloadChoice] = useState<{ current: Wallpaper; slides: Wallpaper[] } | null>(null);
+  const swipeStart = useRef<{ x: number; y: number } | null>(null);
+  const justSwiped = useRef<number>(0);
   const [uploadShowInHero, setUploadShowInHero] = useState<boolean>(false);
   const [uploadTop10Rank, setUploadTop10Rank] = useState<string>("none");
   const [uploading, setUploading] = useState<boolean>(false);
-
-  useEffect(() => {
-    if (!uploadFile) {
-      setUploadPreview(null);
-      return;
-    }
-    const url = URL.createObjectURL(uploadFile);
-    setUploadPreview(url);
-    return () => URL.revokeObjectURL(url);
-  }, [uploadFile]);
 
   // ADMIN EDIT STATES
   const [isEditModalOpen, setIsEditModalOpen] = useState<boolean>(false);
@@ -540,11 +536,11 @@ export default function FusionWallpapersApp() {
     };
   }, [selectedWallpaper]);
 
-  const openWallpaperDetail = (wallpaper: Wallpaper) => {
+  const openWallpaperDetail = (wallpaper: Wallpaper, slides?: Wallpaper[]) => {
     setActiveMenu(null);
-    if (!selectedWallpaper)
-      window.history.pushState({ wallpaperId: wallpaper.id }, "");
+    if (!selectedWallpaper) window.history.pushState({ wallpaperId: wallpaper.id }, "");
     setSelectedWallpaper(wallpaper);
+    setDetailSlides(slides && slides.length > 1 ? slides : null);
     setRelatedVisibleCount(Math.max(8, colCount * 2));
     setDownloadStatus(null);
     setIsExpanded(false);
@@ -553,6 +549,7 @@ export default function FusionWallpapersApp() {
 
   const closeWallpaperDetail = () => {
     setSelectedWallpaper(null);
+    setDetailSlides(null);
     setDownloadStatus(null);
     setIsExpanded(false);
   };
@@ -1015,467 +1012,121 @@ export default function FusionWallpapersApp() {
     });
   };
 
-  const handleAdminUpload = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isAdmin || !uploadFile || !uploadTitle.trim()) return;
-
-    const file = uploadFile;
-    const title = uploadTitle.trim();
-    const category = uploadCategory;
-    const showHero = uploadShowInHero;
-    const rank = uploadTop10Rank;
-
-    const previewUrl = URL.createObjectURL(file);
-    const ratio = await new Promise<number>((resolve) => {
-      const im = new Image();
-      im.onload = () => resolve(im.naturalWidth / im.naturalHeight || 0.75);
-      im.onerror = () => resolve(0.75);
-      im.src = previewUrl;
-    });
-    const pendingId = `pending-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-    setPendingUploads((prev) => [{ id: pendingId, previewUrl, ratio, title }, ...prev]);
-
-    setUploadTitle("");
-    setUploadFile(null);
-    setUploadShowInHero(false);
-    setUploadTop10Rank("none");
-    setIsUploadModalOpen(false);
-    setActiveTab("home");
-    setSelectedPillCategory("All");
-    window.scrollTo({ top: 0, behavior: "smooth" });
-
-    try {
-      const fileExt = file.name.split(".").pop();
-      const prefix = category === "none" ? "general" : category.toLowerCase();
-      const fileName = `${prefix}-${Date.now()}-${Math.random().toString(36).substring(2, 7)}.${fileExt}`;
-
-      const { error: storageError } = await supabase.storage
-        .from("wallpapers")
-        .upload(fileName, file, { cacheControl: "3600", upsert: false });
-      if (storageError) throw storageError;
-
-      const { data: { publicUrl } } = supabase.storage.from("wallpapers").getPublicUrl(fileName);
-
-      let isFirst = false;
-      if (category !== "none") {
-        const { data: existingInCategory } = await supabase
-          .from("wallpapers").select("id").eq("category", category).limit(1);
-        isFirst = !existingInCategory || existingInCategory.length === 0;
-      }
-
-      const parsedRank = rank === "none" ? null : parseInt(rank, 10);
-      const customTags = buildUpdatedTags([], showHero, parsedRank);
-      customTags.push(ratio >= 1 ? PC_TAG : PHONE_TAG);
-
-      const { data: insertedData, error: dbError } = await supabase
-        .from("wallpapers")
-        .insert([{
-          title,
-          image_url: publicUrl,
-          storage_path: fileName,
-          category: category === "none" ? null : category,
-          is_banner: isFirst,
-          tags: customTags,
-        }])
-        .select()
-        .maybeSingle();
-
-      if (dbError) {
-        const { data: fallbackData, error: fallbackError } = await supabase
-          .from("wallpapers")
-          .insert([{
-            title,
-            image_url: publicUrl,
-            storage_path: fileName,
-            category: category === "none" ? null : category,
-          }])
-          .select()
-          .maybeSingle();
-        if (fallbackError) throw fallbackError;
-        if (fallbackData?.id) saveLocalCurationOverride(fallbackData.id, showHero, parsedRank);
-      } else if (insertedData?.id) {
-        saveLocalCurationOverride(insertedData.id, showHero, parsedRank);
-      }
-
-      setPendingUploads((prev) => prev.filter((p) => p.id !== pendingId));
-      URL.revokeObjectURL(previewUrl);
-      await fetchWallpapers(true);
-    } catch (err: any) {
-      setPendingUploads((prev) =>
-        prev.map((p) => (p.id === pendingId ? { ...p, failed: true } : p))
-      );
-      alert(`Upload failed: ${err.message}`);
+  const onSwipeStart = (e: React.PointerEvent) => {
+    swipeStart.current = { x: e.clientX, y: e.clientY };
+  };
+  const onSwipeEnd = (e: React.PointerEvent, go: (dir: 1 | -1) => void) => {
+    const s = swipeStart.current;
+    swipeStart.current = null;
+    if (!s) return;
+    const dx = e.clientX - s.x;
+    const dy = e.clientY - s.y;
+    if (Math.abs(dx) > 40 && Math.abs(dx) > Math.abs(dy) * 1.3) {
+      justSwiped.current = Date.now();
+      go(dx < 0 ? 1 : -1);
     }
   };
-
-  const handleAdminDelete = async (
-    e: React.MouseEvent,
-    wallpaper: Wallpaper
-  ) => {
-    e.stopPropagation();
-    setActiveMenu(null);
-    if (!isAdmin) return;
-    if (!window.confirm(`Delete "${wallpaper.title}" permanently?`)) return;
-
-    try {
-      await supabase.storage
-        .from("wallpapers")
-        .remove([wallpaper.storage_path]);
-      await supabase.from("wallpapers").delete().eq("id", wallpaper.id);
-      setWallpapers((prev) => prev.filter((w) => w.id !== wallpaper.id));
-      if (selectedWallpaper?.id === wallpaper.id) closeWallpaperDetail();
-    } catch (err: any) {
-      alert(`Delete failed: ${err.message}`);
+  const stepBatch = (coverId: string, count: number, dir: 1 | -1) =>
+    setBatchIndex((prev) => ({
+      ...prev,
+      [coverId]: Math.min(Math.max((prev[coverId] ?? 0) + dir, 0), count - 1),
+    }));
+  const stepDetail = (dir: 1 | -1) => {
+    if (!detailSlides || !selectedWallpaper) return;
+    const i = detailSlides.findIndex((s) => s.id === selectedWallpaper.id);
+    const next = detailSlides[i + dir];
+    if (next) {
+      setSelectedWallpaper(next);
+      setIsExpanded(false);
     }
   };
-
-  const handleAdminEditSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!isAdmin || !selectedWallpaper || editingWallpaper) return;
-    setEditingWallpaper(true);
-
-    try {
-      const finalCat =
-        editCategorySelection === "none" ? null : editCategorySelection;
-      if (editSetAsBanner && finalCat) {
-        await supabase
-          .from("wallpapers")
-          .update({ is_banner: false })
-          .eq("category", finalCat);
-      }
-
-      const parsedRank =
-        editTop10Rank === "none" ? null : parseInt(editTop10Rank, 10);
-
-      if (parsedRank !== null) {
-        const conflicting = wallpapers.filter(
-          (w) =>
-            w.id !== selectedWallpaper.id &&
-            extractCurationFromWallpaper(w, curationOverrides).top10Rank ===
-              parsedRank
-        );
-        for (const other of conflicting) {
-          const otherCuration = extractCurationFromWallpaper(
-            other,
-            curationOverrides
-          );
-          const cleanedTags = buildUpdatedTags(
-            other.tags,
-            otherCuration.isHero,
-            null
-          );
-          await supabase
-            .from("wallpapers")
-            .update({ tags: cleanedTags })
-            .eq("id", other.id);
-        }
-      }
-
-      const updatedTags = buildUpdatedTags(
-        selectedWallpaper.tags,
-        editShowInHero,
-        parsedRank
-      );
-
-      const { error } = await supabase
-        .from("wallpapers")
-        .update({
-          category: finalCat,
-          is_banner: editSetAsBanner && finalCat !== null,
-          tags: updatedTags,
-        })
-        .eq("id", selectedWallpaper.id);
-
-      if (error) {
-        const { error: fallbackErr } = await supabase
-          .from("wallpapers")
-          .update({
-            category: finalCat,
-            is_banner: editSetAsBanner && finalCat !== null,
-          })
-          .eq("id", selectedWallpaper.id);
-        if (fallbackErr) throw fallbackErr;
-      }
-
-      saveLocalCurationOverride(
-        selectedWallpaper.id,
-        editShowInHero,
-        parsedRank
-      );
-
-      setIsEditModalOpen(false);
-      await fetchWallpapers();
-      closeWallpaperDetail();
-    } catch (err: any) {
-      alert(`Failed to update wallpaper: ${err.message}`);
-    } finally {
-      setEditingWallpaper(false);
-    }
-  };
-
-  const backfillDevices = async () => {
-    if (!isAdmin) return;
-    const todo = wallpapers.filter((w) => !getDevice(w));
-    if (!todo.length) return alert("All wallpapers are already tagged.");
-    let done = 0;
-    for (const w of todo) {
-      try {
-        const ratio = await new Promise<number>((res, rej) => {
-          const im = new Image();
-          im.onload = () => res(im.naturalWidth / im.naturalHeight);
-          im.onerror = rej;
-          im.src = img(w.image_url, 80);
-        });
-        const tags = [...(Array.isArray(w.tags) ? w.tags : []), ratio >= 1 ? PC_TAG : PHONE_TAG];
-        await supabase.from("wallpapers").update({ tags }).eq("id", w.id);
-        done++;
-      } catch {}
-    }
-    alert(`Tagged ${done} of ${todo.length}.`);
-    await fetchWallpapers();
-  };
-
-  const filteredWallpapers = useMemo(() => {
-    return wallpapers.filter((item) => {
-      if (activeTab === "saved" && !savedIds.includes(item.id)) return false;
-
-      if (
-        activeTab === "explore" &&
-        exploreView === "category" &&
-        selectedExploreCategory
-      ) {
-        if (getWallpaperCategory(item) !== selectedExploreCategory) return false;
-      }
-
-      if (activeTab === "home" && selectedPillCategory === "Phone") {
-        if (getDevice(item) !== "phone") return false;
-      } else if (activeTab === "home" && selectedPillCategory === "PC") {
-        if (getDevice(item) !== "pc") return false;
-      } else if (activeTab === "home" && selectedPillCategory !== "All") {
-        const catId = animeCategories.find((c) => c.name === selectedPillCategory)?.id;
-        if (getWallpaperCategory(item) !== catId) return false;
-      }
-
-      const q = searchQuery.trim().toLowerCase();
-      if (q) {
-        const itemCat = (getWallpaperCategory(item) || "").toLowerCase();
-        return (
-          item.title.toLowerCase().includes(q) ||
-          itemCat.includes(q) ||
-          item.storage_path.toLowerCase().includes(q)
-        );
-      }
-
-      return true;
-    });
-  }, [
-    wallpapers,
-    activeTab,
-    savedIds,
-    searchQuery,
-    exploreView,
-    selectedExploreCategory,
-    selectedPillCategory,
-  ]);
-
-  const savedWallpapersList = useMemo(
-    () => wallpapers.filter((w) => savedIds.includes(w.id)),
-    [wallpapers, savedIds]
-  );
-
-  const relatedWallpapers = useMemo(() => {
-    if (!selectedWallpaper) return [];
-    const currentCat = getWallpaperCategory(selectedWallpaper);
-    const others = wallpapers.filter((w) => w.id !== selectedWallpaper.id);
-    const scored = others.map((candidate) => {
-      let score = 0;
-      if (currentCat && getWallpaperCategory(candidate) === currentCat)
-        score += 10;
-      return { wallpaper: candidate, score };
-    });
-    scored.sort((a, b) => b.score - a.score);
-    return scored.map((s) => s.wallpaper);
-  }, [wallpapers, selectedWallpaper]);
-
-  const topTenDailyWallpapers = useMemo(() => {
-    if (wallpapers.length === 0) return [];
-    const daySeed = Math.floor(Date.now() / (1000 * 60 * 60 * 24));
-
-    const pinnedByRank: Record<number, Wallpaper> = {};
-    const pinnedIds = new Set<string>();
-
-    wallpapers.forEach((w) => {
-      const { top10Rank } = extractCurationFromWallpaper(w, curationOverrides);
-      if (
-        top10Rank &&
-        top10Rank >= 1 &&
-        top10Rank <= 10 &&
-        !pinnedByRank[top10Rank]
-      ) {
-        pinnedByRank[top10Rank] = w;
-        pinnedIds.add(w.id);
-      }
-    });
-
-    const unpinned = wallpapers.filter((w) => !pinnedIds.has(w.id));
-    const scored = unpinned.map((w, idx) => {
-      const hash =
-        (w.id.charCodeAt(0) || 1) * 31 +
-        (w.id.charCodeAt(w.id.length - 1) || 1) +
-        daySeed +
-        idx;
-      const dailyScore = (w.downloads || 0) * 100 + (hash % 97);
-      return { wallpaper: w, dailyScore };
-    });
-    scored.sort((a, b) => b.dailyScore - a.dailyScore);
-
-    const result: Wallpaper[] = [];
-    let autoIdx = 0;
-    const maxCount = Math.min(10, wallpapers.length);
-
-    for (let rank = 1; rank <= maxCount; rank++) {
-      if (pinnedByRank[rank]) {
-        result.push(pinnedByRank[rank]);
-      } else if (autoIdx < scored.length) {
-        result.push(scored[autoIdx].wallpaper);
-        autoIdx++;
-      }
-    }
-
-    return result;
-  }, [wallpapers, curationOverrides]);
-
-  const handleToggleCardMenu = (
-    e: React.MouseEvent<HTMLButtonElement>,
-    item: Wallpaper
-  ) => {
-    e.stopPropagation();
-    if (activeMenu?.wallpaper.id === item.id) {
-      setActiveMenu(null);
-      return;
-    }
-
-    const rect = e.currentTarget.getBoundingClientRect();
-    const menuWidth = 160;
-    const menuApproxHeight = isAdmin ? 175 : 135;
-
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12
-    );
-
-    const spaceAbove = rect.top;
-    const spaceBelow = window.innerHeight - rect.bottom;
-
-    if (spaceAbove < menuApproxHeight + 130 && spaceBelow > menuApproxHeight) {
-      setActiveMenu({
-        wallpaper: item,
-        top: rect.bottom + 6,
-        left,
-      });
-    } else {
-      setActiveMenu({
-        wallpaper: item,
-        bottom: window.innerHeight - rect.top + 6,
-        left,
-      });
-    }
-  };
-
-  const renderOfficialSocialsSection = () => (
-    <>
-      {OFFICIAL_FUSION_SOCIALS.map((social) => (
-        <GlassContainer
-          key={social.id}
-          type="rounded"
-          borderRadius={26}
-          tintOpacity={0.14}
-          className="p-3.5 w-full h-full flex items-center"
-        >
-          <a
-            href={social.url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex w-full items-center justify-between gap-3 transition-transform duration-150 active:scale-[0.99]"
-          >
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="h-10 w-10 shrink-0 overflow-hidden rounded-xl border border-white/15 bg-black">
-                <img src="/logo.webp" alt={social.name} className="h-full w-full object-cover" />
-              </div>
-              <div className="min-w-0">
-                <p className={`truncate text-sm font-bold ${isLight ? "text-[#0E2F76]" : "text-white"}`}>{social.name}</p>
-                <p className={`truncate text-[11px] ${isLight ? "text-[#0E2F76]/65" : "text-white/55"}`}>{social.handle}</p>
-              </div>
-            </div>
-            <span className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3.5 text-[11px] font-bold ${isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black"}`}>
-              {social.cta}
-              <ExternalLink className="h-3 w-3" />
-            </span>
-          </a>
-        </GlassContainer>
-      ))}
-    </>
-  );
-
-  const renderBuiltByFusionFooter = () => (
-    <footer className="w-full pt-10 pb-6 text-center select-none">
-      <p
-        className={`text-[11px] sm:text-xs font-medium tracking-[0.18em] uppercase ${
-          isLight ? "text-[#0E2F76]/50" : "text-white/40"
-        }`}
-      >
-        Built by Fusion
-      </p>
-    </footer>
-  );
 
   const renderWallpaperCard = (
     item: Wallpaper,
-    options?: { showRemoveSavedBtn?: boolean }
+    options?: { showRemoveSavedBtn?: boolean; slides?: Wallpaper[] }
   ) => {
-    const isMenuOpen = activeMenu?.wallpaper.id === item.id;
+    const slides = options?.slides && options.slides.length > 1 ? options.slides : null;
+    const idx = slides ? Math.min(batchIndex[item.id] ?? 0, slides.length - 1) : 0;
+    const current = slides ? slides[idx] : item;
+    const known = imageRatios[current.id];
+    const boxRatio = known === undefined ? 0.75 : Math.max(known, 9 / 16);
+    const isMenuOpen = activeMenu?.wallpaper.id === current.id;
+    const arrow =
+      "hidden md:flex absolute top-1/2 z-20 h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100";
 
     return (
-      <div
-        key={item.id}
-        className="break-inside-avoid relative flex flex-col mb-2"
-      >
+      <div key={item.id} className="group break-inside-avoid mb-2 relative flex flex-col">
         <div
-          onClick={() => openWallpaperDetail(item)}
-          style={{
-            aspectRatio: String(
-              imageRatios[item.id] === undefined ? 0.75 : Math.max(imageRatios[item.id], 9 / 16)
-            ),
+          onClick={() => {
+            if (Date.now() - justSwiped.current < 350) return;
+            openWallpaperDetail(current, slides ?? undefined);
           }}
-          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.97] transition-transform duration-150 ease-out border ${
+          onPointerDown={slides ? onSwipeStart : undefined}
+          onPointerUp={slides ? (e) => onSwipeEnd(e, (d) => stepBatch(item.id, slides.length, d)) : undefined}
+          style={{ aspectRatio: String(boxRatio), touchAction: slides ? "pan-y" : undefined }}
+          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out border ${
             isLight
               ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15 shadow-[0_6px_16px_rgba(14,47,118,0.08)]"
               : "bg-[#0a0a0a] border-white/10"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
-          {imageRatios[item.id] === undefined && (
-            <div className="fusion-shimmer absolute inset-0" />
-          )}
+          {known === undefined && <div className="fusion-shimmer absolute inset-0" />}
           <img
-            src={img(item.image_url, 500)}
-            alt={item.title}
+            key={current.id}
+            src={img(current, 500)}
+            alt={current.title}
             loading="lazy"
             draggable={false}
             onLoad={(e) => {
               const { naturalWidth, naturalHeight } = e.currentTarget;
-              setImageRatios((prev) => ({ ...prev, [item.id]: naturalWidth / naturalHeight }));
+              setImageRatios((prev) => ({ ...prev, [current.id]: naturalWidth / naturalHeight }));
             }}
             onContextMenu={(e) => e.preventDefault()}
             className={`absolute inset-0 h-full w-full object-cover pointer-events-none select-none transition-opacity duration-300 ease-out ${
-              imageRatios[item.id] === undefined ? "opacity-0" : "opacity-100"
+              known === undefined ? "opacity-0" : "opacity-100"
             }`}
           />
-          <div
-            className="absolute inset-0 z-10 bg-transparent"
-            onContextMenu={(e) => e.preventDefault()}
-          />
+          <div className="absolute inset-0 z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
+
+          {slides && idx > 0 && (
+            <button
+              type="button"
+              aria-label="Previous wallpaper"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); stepBatch(item.id, slides.length, -1); }}
+              className={`${arrow} left-1.5`}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+          )}
+          {slides && idx < slides.length - 1 && (
+            <button
+              type="button"
+              aria-label="Next wallpaper"
+              onPointerDown={(e) => e.stopPropagation()}
+              onClick={(e) => { e.stopPropagation(); stepBatch(item.id, slides.length, 1); }}
+              className={`${arrow} right-1.5`}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          )}
         </div>
+
+        {slides && (
+          <div className="mt-1.5 flex items-center justify-center gap-1">
+            {slides.map((s, i) => (
+              <span
+                key={s.id}
+                className={`h-1.5 rounded-full transition-all duration-200 ${
+                  i === idx
+                    ? `w-3 ${isLight ? "bg-[#0E2F76]" : "bg-white"}`
+                    : `w-1.5 ${isLight ? "bg-[#0E2F76]/25" : "bg-white/35"}`
+                }`}
+              />
+            ))}
+          </div>
+        )}
 
         <div className="mt-0.5 px-0.5 h-4 flex items-center justify-between">
           <h3
@@ -1485,19 +1136,17 @@ export default function FusionWallpapersApp() {
           >
             {item.title}
           </h3>
-
           <button
             type="button"
             aria-label="Wallpaper options"
-            onClick={(e) => handleToggleCardMenu(e, item)}
+            onClick={(e) => {
+              setMenuSlides(slides);
+              handleToggleCardMenu(e, current);
+            }}
             className={`h-6 w-6 -my-1 -mr-1 rounded-md flex items-center justify-center transition active:scale-90 ${
               isMenuOpen
-                ? isLight
-                  ? "bg-[#0E2F76]/15 text-[#0E2F76]"
-                  : "bg-white/20 text-white"
-                : isLight
-                ? "text-[#0E2F76]/80 hover:bg-[#0E2F76]/10"
-                : "text-white/80 hover:bg-white/10"
+                ? isLight ? "bg-[#0E2F76]/15 text-[#0E2F76]" : "bg-white/20 text-white"
+                : isLight ? "text-[#0E2F76]/80 hover:bg-[#0E2F76]/10" : "text-white/80 hover:bg-white/10"
             }`}
           >
             <MoreHorizontal className="h-3.5 w-3.5" />
@@ -1556,12 +1205,17 @@ export default function FusionWallpapersApp() {
 
   const renderMasonry = (
     items: Wallpaper[],
-    opts?: { pending?: PendingUpload[]; showRemoveSavedBtn?: boolean }
+    opts?: { pending?: PendingUpload[]; showRemoveSavedBtn?: boolean; noGroup?: boolean }
   ) => {
-    type Entry = { kind: "pending"; p: PendingUpload } | { kind: "wp"; w: Wallpaper };
+    type Entry =
+      | { kind: "pending"; p: PendingUpload }
+      | { kind: "wp"; w: Wallpaper; slides: Wallpaper[] };
+    const groups = opts?.noGroup
+      ? items.map((w) => ({ cover: w, slides: [w] }))
+      : groupBatches(items);
     const entries: Entry[] = [
       ...(opts?.pending || []).map((p) => ({ kind: "pending" as const, p })),
-      ...items.map((w) => ({ kind: "wp" as const, w })),
+      ...groups.map((g) => ({ kind: "wp" as const, w: g.cover, slides: g.slides })),
     ];
     const heights: number[] = Array(colCount).fill(0);
     const cols: Entry[][] = Array.from({ length: colCount }, () => []);
@@ -1578,13 +1232,13 @@ export default function FusionWallpapersApp() {
       heights[i] += h;
     }
     return (
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1 -mx-2 md:gap-2 md:mx-0">
         {cols.map((col, ci) => (
           <div key={ci} className="flex-1 min-w-0 flex flex-col">
             {col.map((e) =>
               e.kind === "pending"
                 ? renderPendingCard(e.p)
-                : renderWallpaperCard(e.w, { showRemoveSavedBtn: opts?.showRemoveSavedBtn })
+                : renderWallpaperCard(e.w, { showRemoveSavedBtn: opts?.showRemoveSavedBtn, slides: e.slides })
             )}
           </div>
         ))}
@@ -1601,7 +1255,7 @@ export default function FusionWallpapersApp() {
       heights[i] += 1 / Math.max(r, 9 / 16) + 0.14;
     });
     return (
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-1 -mx-2 md:gap-2 md:mx-0">
         {cols.map((col, ci) => (
           <div key={ci} className="flex-1 min-w-0 flex flex-col">
             {col.map((r, i) => (
@@ -1706,7 +1360,9 @@ export default function FusionWallpapersApp() {
               e.stopPropagation();
               const target = activeMenu.wallpaper;
               setActiveMenu(null);
-              triggerDirectDownload(target);
+              if (menuSlides && menuSlides.length > 1)
+                setDownloadChoice({ current: target, slides: menuSlides });
+              else triggerDirectDownload(target);
             }}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
               isLight
@@ -1784,7 +1440,7 @@ export default function FusionWallpapersApp() {
                 tintOpacity={0.14}
                 aria-label="Open settings"
                 onClick={() => router.push("/settings")}
-                className="h-11 px-5 gap-2 text-xs font-semibold shrink-0"
+                className="h-9 px-4 gap-2 text-xs font-semibold shrink-0"
               >
                 <Settings className={`h-4 w-4 ${isLight ? "text-[#0E2F76]" : "text-white"}`} />
                 <span>Settings</span>
@@ -2027,7 +1683,7 @@ export default function FusionWallpapersApp() {
                     </GlassButton>
                   </GlassContainer>
                 ) : (
-                  renderMasonry(savedWallpapersList, { showRemoveSavedBtn: true })
+                  renderMasonry(savedWallpapersList, { showRemoveSavedBtn: true, noGroup: true })
                 )}
               </div>
             </div>
@@ -2105,7 +1761,7 @@ export default function FusionWallpapersApp() {
                   if (!banner && catWallpapers.length > 0)
                     banner = catWallpapers[catWallpapers.length - 1];
                   const bannerUrl = banner
-                    ? img(banner.image_url, 600)
+                    ? img(banner, 600)
                     : cat.fallbackBanner;
 
                   return (
@@ -2179,7 +1835,7 @@ export default function FusionWallpapersApp() {
               !searchQuery &&
               selectedPillCategory === "All" &&
               pcHeroWallpapers.length > 0 && (
-                <div className="hidden md:block mb-9 space-y-7 pt-2">
+                <div className="hidden md:block mb-3 space-y-7 pt-2">
                   <div
                     className={`group relative w-full h-[360px] rounded-3xl overflow-hidden bg-[#0a0a0a] border transition-shadow duration-300 ${
                       isLight
@@ -2198,7 +1854,7 @@ export default function FusionWallpapersApp() {
                         onClick={() => openWallpaperDetail(hero)}
                       >
                         <img
-                          src={img(hero.image_url, 900)}
+                          src={img(hero, 900)}
                           alt={hero.title}
                           className="w-full h-full object-cover"
                         />
@@ -2340,7 +1996,7 @@ export default function FusionWallpapersApp() {
                             }`}
                           >
                             <img
-                              src={img(rankedItem.image_url, 400)}
+                              src={img(rankedItem, 400)}
                               alt={rankedItem.title}
                               loading="lazy"
                               className="w-full h-full object-cover"
@@ -2378,7 +2034,7 @@ export default function FusionWallpapersApp() {
             )}
 
             {activeTab === "home" && (
-              <h2 className={`hidden md:block pt-2 pb-3 text-lg sm:text-xl font-bold tracking-tight ${isLight ? "text-[#0E2F76]" : "text-white"}`}>
+              <h2 className={`hidden md:block pt-0 pb-2 text-lg sm:text-xl font-bold tracking-tight ${isLight ? "text-[#0E2F76]" : "text-white"}`}>
                 {searchQuery ? "Results" : selectedPillCategory === "All" ? "All Wallpapers" : selectedPillCategory}
               </h2>
             )}
@@ -2424,7 +2080,10 @@ export default function FusionWallpapersApp() {
             ) : (
               renderMasonry(
                 activeTab === "home" ? orderFeed(filteredWallpapers) : filteredWallpapers,
-                { pending: activeTab === "home" ? pendingUploads : [] }
+                {
+                  pending: activeTab === "home" ? pendingUploads : [],
+                  noGroup: activeTab === "saved",
+                }
               )
             )}
           </div>
@@ -2584,6 +2243,9 @@ export default function FusionWallpapersApp() {
             {/* WALLPAPER PREVIEW BOX */}
             <div
               key={selectedWallpaper.id}
+              onPointerDown={detailSlides ? onSwipeStart : undefined}
+              onPointerUp={detailSlides ? (e) => onSwipeEnd(e, stepDetail) : undefined}
+              style={{ touchAction: detailSlides ? "pan-y" : undefined }}
               className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 animate-in fade-in duration-200 ${
                 detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
               }`}
@@ -2592,7 +2254,7 @@ export default function FusionWallpapersApp() {
                 src={
                   detailSrc && detailSrc.id === selectedWallpaper.id
                     ? detailSrc.src
-                    : img(selectedWallpaper.image_url, 500)
+                    : img(selectedWallpaper, 500)
                 }
                 decoding="async"
                 alt={selectedWallpaper.title}
@@ -2614,14 +2276,56 @@ export default function FusionWallpapersApp() {
                 <button
                   type="button"
                   aria-label={isExpanded ? "Show less" : "View full wallpaper"}
+                  onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="fusion-bounce absolute bottom-3 inset-x-0 mx-auto z-20 inline-flex h-9 w-fit items-center gap-1.5 rounded-full border border-white/25 bg-white/10 px-4 text-[11px] font-semibold text-white shadow-[0_4px_14px_rgba(0,0,0,0.35)] backdrop-blur-md"
+                  className="fusion-bounce absolute left-2 top-2 z-20 flex h-10 w-10 items-center justify-center text-white"
+                  style={{ filter: "drop-shadow(0 0 2px rgba(0,0,0,0.95)) drop-shadow(0 1px 6px rgba(0,0,0,0.6))" }}
                 >
-                  {isExpanded ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-                  <span>{isExpanded ? "Show less" : "View Full Wallpaper"}</span>
+                  {isExpanded ? <Minimize2 className="h-5 w-5" strokeWidth={2.5} /> : <Maximize2 className="h-5 w-5" strokeWidth={2.5} />}
                 </button>
               )}
+
+              {detailSlides && (
+                <>
+                  <span className="absolute right-3 top-3 z-20 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white">
+                    {detailSlides.findIndex((s) => s.id === selectedWallpaper.id) + 1} / {detailSlides.length}
+                  </span>
+                  <button
+                    type="button"
+                    aria-label="Previous wallpaper"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => stepDetail(-1)}
+                    className="hidden md:flex absolute left-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
+                  >
+                    <ChevronLeft className="h-5 w-5" />
+                  </button>
+                  <button
+                    type="button"
+                    aria-label="Next wallpaper"
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={() => stepDetail(1)}
+                    className="hidden md:flex absolute right-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
+                  >
+                    <ChevronRight className="h-5 w-5" />
+                  </button>
+                </>
+              )}
             </div>
+
+            {detailSlides && (
+              <div className="mb-3 -mt-1 flex items-center justify-center gap-1.5">
+                {detailSlides.map((s) => (
+                  <span
+                    key={s.id}
+                    className={`h-1.5 rounded-full transition-all duration-200 ${
+                      s.id === selectedWallpaper.id
+                        ? `w-4 ${isLight ? "bg-[#0E2F76]" : "bg-white"}`
+                        : `w-1.5 ${isLight ? "bg-[#0E2F76]/25" : "bg-white/35"}`
+                    }`}
+                  />
+                ))}
+              </div>
+            )}
 
             {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS */}
             <div className="flex items-center gap-3 w-full max-w-md mb-5">
@@ -2650,7 +2354,11 @@ export default function FusionWallpapersApp() {
               <GlassButton
                 typeShape="pill"
                 activeWhite={true}
-                onClick={() => triggerDirectDownload(selectedWallpaper)}
+                onClick={() =>
+                  detailSlides
+                    ? setDownloadChoice({ current: selectedWallpaper, slides: detailSlides })
+                    : triggerDirectDownload(selectedWallpaper)
+                }
                 disabled={downloadingId === selectedWallpaper.id}
                 className="flex-1 h-12 text-xs font-extrabold"
               >
@@ -2685,7 +2393,11 @@ export default function FusionWallpapersApp() {
                 {downloadStatus.type === "error" && (
                   <button
                     type="button"
-                    onClick={() => triggerDirectDownload(selectedWallpaper)}
+                    onClick={() =>
+                      detailSlides
+                        ? setDownloadChoice({ current: selectedWallpaper, slides: detailSlides })
+                        : triggerDirectDownload(selectedWallpaper)
+                    }
                     className="underline font-semibold ml-2"
                   >
                     Retry
@@ -2725,6 +2437,51 @@ export default function FusionWallpapersApp() {
           </div>
         </div>
       )}
+
+      {/* ================= DOWNLOAD CHOICE MODAL ================= */}
+      <Dialog open={!!downloadChoice} onOpenChange={(o) => !o && setDownloadChoice(null)}>
+        <DialogContent
+          style={{ background: "rgba(10, 10, 14, 0.92)" }}
+          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-sm p-5"
+        >
+          <DialogHeader>
+            <DialogTitle className="text-center text-base font-black text-white">
+              Download
+            </DialogTitle>
+            <DialogDescription className="text-center text-xs text-white/60">
+              This post has {downloadChoice?.slides.length} wallpapers. What would you like to save?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="mt-3 space-y-2">
+            <GlassButton
+              typeShape="pill"
+              activeWhite={true}
+              className="w-full h-11 text-xs font-bold"
+              onClick={() => {
+                const c = downloadChoice!.current;
+                setDownloadChoice(null);
+                triggerDirectDownload(c);
+              }}
+            >
+              Download this wallpaper
+            </GlassButton>
+            <GlassButton
+              typeShape="pill"
+              className="w-full h-11 text-xs font-bold"
+              onClick={async () => {
+                const all = downloadChoice!.slides;
+                setDownloadChoice(null);
+                for (const w of all) {
+                  await triggerDirectDownload(w);
+                  await new Promise((r) => setTimeout(r, 600));
+                }
+              }}
+            >
+              Download all {downloadChoice?.slides.length} wallpapers
+            </GlassButton>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* ================= AUTHENTICATION MODAL ================= */}
       <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
@@ -3294,29 +3051,56 @@ export default function FusionWallpapersApp() {
               <Input
                 type="file"
                 accept="image/*"
-                required
-                onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                multiple
+                onChange={(e) => {
+                  const picked = Array.from(e.target.files || []);
+                  const MAX = 30 * 1024 * 1024;
+                  const tooBig = picked.filter((f) => f.size > MAX);
+                  if (tooBig.length) alert(`Over 30 MB, skipped: ${tooBig.map((f) => f.name).join(", ")}`);
+                  setUploadFiles((prev) => [
+                    ...prev,
+                    ...picked
+                      .filter((f) => f.size <= MAX)
+                      .map((file) => ({
+                        id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 6)}`,
+                        file,
+                        url: URL.createObjectURL(file),
+                      })),
+                  ]);
+                  e.target.value = "";
+                }}
                 className="bg-black/70 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-lg file:px-2 file:py-1 file:mr-2 file:text-[11px] file:font-bold rounded-xl h-10 py-1 text-xs"
               />
             </div>
 
-            {uploadPreview && (
-              <div className="relative mx-auto mt-2 w-40 overflow-hidden rounded-2xl border border-white/15 bg-[#0a0a0a]">
-                <img
-                  src={uploadPreview}
-                  alt="Upload preview"
-                  className={`block h-auto max-h-64 w-full object-contain transition-[opacity,filter] duration-300 ease-out ${
-                    uploading ? "opacity-60 blur-[1px]" : "opacity-100"
-                  }`}
-                />
-                {uploading && (
-                  <>
-                    <div className="fusion-shimmer pointer-events-none absolute inset-0" />
-                    <div className="absolute inset-x-0 bottom-0 h-1 overflow-hidden bg-white/10">
-                      <div className="fusion-bar h-full w-1/3 rounded-full bg-white/80" />
+            {uploadFiles.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[11px] text-white/60">
+                  {uploadFiles.length > 1
+                    ? "Batch: #1 shows first. Use the arrows to change the order."
+                    : "1 wallpaper selected."}
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  {uploadFiles.map((f, i) => (
+                    <div key={f.id} className="relative overflow-hidden rounded-xl border border-white/15 bg-black">
+                      <img src={f.url} alt="" className="aspect-[9/16] w-full object-cover" />
+                      <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white">
+                        {i + 1}
+                      </span>
+                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/60 p-1 text-white">
+                        <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => moveUpload(i, -1)} className="disabled:opacity-30">
+                          <ChevronLeft className="h-4 w-4" />
+                        </button>
+                        <button type="button" aria-label="Remove" onClick={() => removeUpload(f.id)}>
+                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
+                        </button>
+                        <button type="button" aria-label="Move later" disabled={i === uploadFiles.length - 1} onClick={() => moveUpload(i, 1)} className="disabled:opacity-30">
+                          <ChevronRight className="h-4 w-4" />
+                        </button>
+                      </div>
                     </div>
-                  </>
-                )}
+                  ))}
+                </div>
               </div>
             )}
 
@@ -3324,7 +3108,7 @@ export default function FusionWallpapersApp() {
               type="submit"
               typeShape="pill"
               activeWhite={true}
-              disabled={uploading || !uploadFile}
+              disabled={uploading || uploadFiles.length === 0}
               className="w-full h-11 text-xs font-extrabold mt-1"
             >
               {uploading ? (
@@ -3333,7 +3117,7 @@ export default function FusionWallpapersApp() {
                   <span>Uploading...</span>
                 </>
               ) : (
-                "Publish Wallpaper"
+                uploadFiles.length > 1 ? `Publish ${uploadFiles.length} wallpapers` : "Publish Wallpaper"
               )}
             </GlassButton>
           </form>
