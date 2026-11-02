@@ -211,7 +211,7 @@ export default function SettingsPage() {
   return (
     <div className="s-root min-h-screen">
       <style>{css}</style>
-      <div className="mx-auto max-w-md px-4 pb-14 pt-4">
+      <div className="mx-auto w-full max-w-md md:max-w-4xl px-4 pb-14 pt-4">
         {/* Top bar */}
         <div className="flex items-center justify-between">
           <button type="button" aria-label="Back" onClick={() => router.back()} className="s-circle">
@@ -235,143 +235,149 @@ export default function SettingsPage() {
           </p>
         )}
 
-        {/* Profile card */}
-        <div className="s-card mt-5" style={{ background: "linear-gradient(120deg, var(--s-card) 62%, var(--s-tint))" }}>
-          <div className="flex items-center gap-4 p-4">
-            <div className="relative">
-              <div className="rounded-full p-[3px]" style={{ boxShadow: "0 0 0 2px var(--s-accent)" }}>
-                <AvatarBadge id={avatarId} name={displayName} size={72} />
+        <div className="md:grid md:grid-cols-2 md:gap-8 md:items-start">
+          <div className="md:sticky md:top-6">
+            {/* Profile card */}
+            <div className="s-card mt-5" style={{ background: "linear-gradient(120deg, var(--s-card) 62%, var(--s-tint))" }}>
+              <div className="flex items-center gap-4 p-4">
+                <div className="relative">
+                  <div className="rounded-full p-[3px]" style={{ boxShadow: "0 0 0 2px var(--s-accent)" }}>
+                    <AvatarBadge id={avatarId} name={displayName} size={72} />
+                  </div>
+                  <button
+                    type="button" aria-label="Edit avatar"
+                    onClick={() => document.getElementById("avatar-grid")?.scrollIntoView({ behavior: "smooth" })}
+                    className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border"
+                    style={{ background: "var(--s-bg)", borderColor: "var(--s-border)", color: "var(--s-text)" }}
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+                <div className="min-w-0">
+                  <p className="truncate text-xl font-bold" style={{ color: "var(--s-text)" }}>{displayName}</p>
+                  <p className="truncate text-sm" style={{ color: "var(--s-muted)" }}>{user.email}</p>
+                </div>
               </div>
-              <button
-                type="button" aria-label="Edit avatar"
-                onClick={() => document.getElementById("avatar-grid")?.scrollIntoView({ behavior: "smooth" })}
-                className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border"
-                style={{ background: "var(--s-bg)", borderColor: "var(--s-border)", color: "var(--s-text)" }}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-              </button>
             </div>
-            <div className="min-w-0">
-              <p className="truncate text-xl font-bold" style={{ color: "var(--s-text)" }}>{displayName}</p>
-              <p className="truncate text-sm" style={{ color: "var(--s-muted)" }}>{user.email}</p>
-            </div>
-          </div>
-        </div>
 
-        {/* Avatars */}
-        <div id="avatar-grid" className="mb-2 mt-6 flex items-center justify-between px-1">
-          <div className="flex items-center gap-2">
-            <UserIcon className="h-5 w-5" style={{ color: "var(--s-accent)" }} />
-            <h2 className="text-[15px] font-semibold" style={{ color: "var(--s-text)" }}>Choose Your Avatar</h2>
+            {/* Avatars */}
+            <div id="avatar-grid" className="mb-2 mt-6 flex items-center justify-between px-1">
+              <div className="flex items-center gap-2">
+                <UserIcon className="h-5 w-5" style={{ color: "var(--s-accent)" }} />
+                <h2 className="text-[15px] font-semibold" style={{ color: "var(--s-text)" }}>Choose Your Avatar</h2>
+              </div>
+              <span className="text-sm" style={{ color: "var(--s-muted)" }}>{savedCount} saved</span>
+            </div>
+            <div className="s-card grid grid-cols-5 gap-y-3 p-4">
+              {AVATAR_IDS.filter((id) => AVATARS.some((a) => a.id === id)).map((id) => (
+                <button
+                  key={id} type="button" aria-label={`Avatar ${id}`} onClick={() => chooseAvatar(id)}
+                  className="mx-auto rounded-full transition-transform duration-150 ease-out active:scale-90"
+                  style={{ boxShadow: avatarId === id ? "0 0 0 2px var(--s-card), 0 0 0 4px var(--s-accent)" : "none" }}
+                >
+                  <AvatarBadge id={id} size={52} />
+                </button>
+              ))}
+            </div>
           </div>
-          <span className="text-sm" style={{ color: "var(--s-muted)" }}>{savedCount} saved</span>
-        </div>
-        <div className="s-card grid grid-cols-5 gap-y-3 p-4">
-          {AVATAR_IDS.filter((id) => AVATARS.some((a) => a.id === id)).map((id) => (
-            <button
-              key={id} type="button" aria-label={`Avatar ${id}`} onClick={() => chooseAvatar(id)}
-              className="mx-auto rounded-full transition-transform duration-150 ease-out active:scale-90"
-              style={{ boxShadow: avatarId === id ? "0 0 0 2px var(--s-card), 0 0 0 4px var(--s-accent)" : "none" }}
-            >
-              <AvatarBadge id={id} size={52} />
+
+          <div>
+            {/* Account settings */}
+            <Title icon={SettingsIcon}>Account Settings</Title>
+            <div className="s-card">
+              <div className="s-item">
+                <Row
+                  icon={UserIcon} label="Change Name" onClick={() => setOpen(open === "name" ? null : "name")}
+                  right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
+                />
+                {open === "name" && (
+                  <div className="flex gap-2 px-4 pb-4">
+                    <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="Display name" className="s-input" />
+                    <button type="button" onClick={saveName} disabled={busy} className="s-btn">Save</button>
+                  </div>
+                )}
+              </div>
+              <div className="s-item">
+                <Row
+                  icon={Lock} label="Change Password" onClick={() => setOpen(open === "password" ? null : "password")}
+                  right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
+                />
+                {open === "password" && (
+                  <div className="flex gap-2 px-4 pb-4">
+                    <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="New password (min. 6)" className="s-input" />
+                    <button type="button" onClick={savePassword} disabled={busy} className="s-btn">Save</button>
+                  </div>
+                )}
+              </div>
+              <div className="s-item">
+                <Row icon={Bell} label="Email Notifications" right={<Switch on={emailNotifs} onChange={toggleEmailNotifs} label="Email notifications" />} />
+              </div>
+              <div className="s-item">
+                <Row
+                  icon={ShieldCheck} label="Privacy Settings" onClick={() => setOpen(open === "privacy" ? null : "privacy")}
+                  right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
+                />
+                {open === "privacy" && (
+                  <p className="px-4 pb-4 text-xs" style={{ color: "var(--s-muted)" }}>
+                    Your email is masked on your profile by default and is never shown on wallpapers you save.
+                  </p>
+                )}
+              </div>
+              <div className="s-item">
+                <Row
+                  icon={Link2} label="Linked Accounts"
+                  sub={providers.length ? providers.map(pretty).join(", ") : "Email"}
+                />
+                <div className="flex flex-wrap gap-2 px-4 pb-4">
+                  {!providers.includes("google") && (
+                    <button type="button" onClick={() => linkProvider("google")} className="s-btn-ghost">Link Google Account</button>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            {/* App preferences */}
+            <Title icon={Palette}>App Preferences</Title>
+            <div className="s-card">
+              <div className="s-item">
+                <Row icon={Globe} label="Language" right={<span className="text-sm" style={{ color: "var(--s-muted)" }}>English</span>} />
+              </div>
+              <div className="s-item">
+                <Row icon={Moon} label="Dark Mode" right={<Switch on={theme === "dark"} onChange={toggleTheme} label="Dark mode" />} />
+              </div>
+              <div className="s-item">
+                <Row icon={Waves} label="Haptic Feedback" right={<Switch on={haptics} onChange={toggleHaptics} label="Haptic feedback" />} />
+              </div>
+            </div>
+
+            {/* Danger zone */}
+            <Title icon={AlertTriangle} danger>Danger Zone</Title>
+            <button type="button" onClick={signOut} className="s-card flex h-14 w-full items-center justify-center gap-2 text-sm font-semibold transition-transform duration-150 active:scale-[0.98]" style={{ color: "var(--s-text)" }}>
+              <LogOut className="h-5 w-5" /> Log Out
             </button>
-          ))}
-        </div>
 
-        {/* Account settings */}
-        <Title icon={SettingsIcon}>Account Settings</Title>
-        <div className="s-card">
-          <div className="s-item">
-            <Row
-              icon={UserIcon} label="Change Name" onClick={() => setOpen(open === "name" ? null : "name")}
-              right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
-            />
-            {open === "name" && (
-              <div className="flex gap-2 px-4 pb-4">
-                <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="Display name" className="s-input" />
-                <button type="button" onClick={saveName} disabled={busy} className="s-btn">Save</button>
-              </div>
-            )}
-          </div>
-          <div className="s-item">
-            <Row
-              icon={Lock} label="Change Password" onClick={() => setOpen(open === "password" ? null : "password")}
-              right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
-            />
-            {open === "password" && (
-              <div className="flex gap-2 px-4 pb-4">
-                <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="New password (min. 6)" className="s-input" />
-                <button type="button" onClick={savePassword} disabled={busy} className="s-btn">Save</button>
-              </div>
-            )}
-          </div>
-          <div className="s-item">
-            <Row icon={Bell} label="Email Notifications" right={<Switch on={emailNotifs} onChange={toggleEmailNotifs} label="Email notifications" />} />
-          </div>
-          <div className="s-item">
-            <Row
-              icon={ShieldCheck} label="Privacy Settings" onClick={() => setOpen(open === "privacy" ? null : "privacy")}
-              right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
-            />
-            {open === "privacy" && (
-              <p className="px-4 pb-4 text-xs" style={{ color: "var(--s-muted)" }}>
-                Your email is masked on your profile by default and is never shown on wallpapers you save.
-              </p>
-            )}
-          </div>
-          <div className="s-item">
-            <Row
-              icon={Link2} label="Linked Accounts"
-              sub={providers.length ? providers.map(pretty).join(", ") : "Email"}
-            />
-            <div className="flex flex-wrap gap-2 px-4 pb-4">
-              {!providers.includes("google") && (
-                <button type="button" onClick={() => linkProvider("google")} className="s-btn-ghost">Link Google Account</button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* App preferences */}
-        <Title icon={Palette}>App Preferences</Title>
-        <div className="s-card">
-          <div className="s-item">
-            <Row icon={Globe} label="Language" right={<span className="text-sm" style={{ color: "var(--s-muted)" }}>English</span>} />
-          </div>
-          <div className="s-item">
-            <Row icon={Moon} label="Dark Mode" right={<Switch on={theme === "dark"} onChange={toggleTheme} label="Dark mode" />} />
-          </div>
-          <div className="s-item">
-            <Row icon={Waves} label="Haptic Feedback" right={<Switch on={haptics} onChange={toggleHaptics} label="Haptic feedback" />} />
-          </div>
-        </div>
-
-        {/* Danger zone */}
-        <Title icon={AlertTriangle} danger>Danger Zone</Title>
-        <button type="button" onClick={signOut} className="s-card flex h-14 w-full items-center justify-center gap-2 text-sm font-semibold transition-transform duration-150 active:scale-[0.98]" style={{ color: "var(--s-text)" }}>
-          <LogOut className="h-5 w-5" /> Log Out
-        </button>
-
-        {!confirmDelete ? (
-          <button
-            type="button" onClick={() => setConfirmDelete(true)}
-            className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-3xl border text-sm font-semibold transition-transform duration-150 active:scale-[0.98]"
-            style={{ borderColor: "rgba(255,90,106,.5)", color: "var(--s-danger)", background: "rgba(255,90,106,.06)" }}
-          >
-            <Trash2 className="h-5 w-5" /> Delete Account
-          </button>
-        ) : (
-          <div className="mt-3 rounded-3xl border p-4" style={{ borderColor: "rgba(255,90,106,.5)", background: "rgba(255,90,106,.06)" }}>
-            <p className="text-sm font-semibold" style={{ color: "var(--s-danger)" }}>Delete your account forever?</p>
-            <p className="mt-1 text-xs" style={{ color: "var(--s-muted)" }}>Your profile and saved wallpapers will be removed. This can't be undone.</p>
-            <div className="mt-3 flex gap-2">
-              <button type="button" onClick={() => setConfirmDelete(false)} className="s-btn-ghost flex-1 justify-center">Cancel</button>
-              <button type="button" onClick={deleteAccount} disabled={busy} className="flex h-10 flex-1 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: "var(--s-danger)" }}>
-                {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, delete"}
+            {!confirmDelete ? (
+              <button
+                type="button" onClick={() => setConfirmDelete(true)}
+                className="mt-3 flex h-14 w-full items-center justify-center gap-2 rounded-3xl border text-sm font-semibold transition-transform duration-150 active:scale-[0.98]"
+                style={{ borderColor: "rgba(255,90,106,.5)", color: "var(--s-danger)", background: "rgba(255,90,106,.06)" }}
+              >
+                <Trash2 className="h-5 w-5" /> Delete Account
               </button>
-            </div>
+            ) : (
+              <div className="mt-3 rounded-3xl border p-4" style={{ borderColor: "rgba(255,90,106,.5)", background: "rgba(255,90,106,.06)" }}>
+                <p className="text-sm font-semibold" style={{ color: "var(--s-danger)" }}>Delete your account forever?</p>
+                <p className="mt-1 text-xs" style={{ color: "var(--s-muted)" }}>Your profile and saved wallpapers will be removed. This can't be undone.</p>
+                <div className="mt-3 flex gap-2">
+                  <button type="button" onClick={() => setConfirmDelete(false)} className="s-btn-ghost flex-1 justify-center">Cancel</button>
+                  <button type="button" onClick={deleteAccount} disabled={busy} className="flex h-10 flex-1 items-center justify-center rounded-full text-xs font-bold text-white" style={{ background: "var(--s-danger)" }}>
+                    {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, delete"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
-        )}
+        </div>
 
         <p className="mt-8 text-center text-xs" style={{ color: "var(--s-muted)" }}>Fusion</p>
       </div>
@@ -381,8 +387,9 @@ export default function SettingsPage() {
 
 const css = `
 .s-root{--s-bg:#000;--s-card:#0b0b0d;--s-border:rgba(255,255,255,.10);--s-text:#f2f0ef;--s-muted:rgba(242,240,239,.55);--s-accent:#6d5bf0;--s-tint:rgba(109,91,240,.14);--s-danger:#ff5a6a;background:var(--s-bg)}
-.theme-light .s-root{--s-bg:#F4FEFF;--s-card:#ffffff;--s-border:rgba(14,47,118,.14);--s-text:#0E2F76;--s-muted:rgba(14,47,118,.6);--s-tint:rgba(109,91,240,.10)}
+.theme-light .s-root{--s-bg:#E9F0F9;--s-card:#ffffff;--s-border:rgba(14,47,118,.22);--s-text:#0E2F76;--s-muted:rgba(14,47,118,.6);--s-tint:rgba(109,91,240,.10)}
 .s-card{background:var(--s-card);border:1px solid var(--s-border);border-radius:24px;overflow:hidden}
+.theme-light .s-card{box-shadow:0 1px 2px rgba(14,47,118,.08),0 8px 22px rgba(14,47,118,.10)}
 .s-item + .s-item{border-top:1px solid var(--s-border)}
 .s-circle{height:44px;width:44px;border-radius:9999px;color:var(--s-text)}
 .s-input{height:40px;min-width:0;flex:1;border-radius:9999px;border:1px solid var(--s-border);background:transparent;padding:0 14px;font-size:13px;color:var(--s-text);outline:none}
