@@ -120,3 +120,14 @@ body {
 .fusion-btn:active,
 .s-circle:active,
 .s-btn-ghost:active { transform: scale(0.96); }
+
+.theme-light .fusion-btn,
+.theme-light .s-circle,
+.theme-light .s-btn-ghost {
+  background: linear-gradient(180deg, #ffffff, #E8F0FB);
+  border-color: rgba(14, 47, 118, 0.28);
+  box-shadow: 0 1px 2px rgba(14, 47, 118, 0.16), 0 4px 10px rgba(14, 47, 118, 0.10);
+}
+.theme-light .fusion-btn::before,
+.theme-light .s-circle::before,
+.theme-light .s-btn-ghost::before { display: none; }
