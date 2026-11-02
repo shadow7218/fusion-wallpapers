@@ -1,21 +1,32 @@
 import type { Metadata, Viewport } from "next";
+import { ogImg } from "@/lib/img";
 import "./globals.css";
 import "./liquid-glass.css";
 
 export const metadata: Metadata = {
-  title: "Fusion Wallpapers",
-  description: "Discover and download high-resolution anime wallpapers.",
+  metadataBase: new URL("https://fusion-wallpapers.vercel.app"),
+  title: "Fusion Wallpapers - Find Your Perfect Anime Wallpaper",
+  description:
+    "Discover and download high-quality anime, gaming, and aesthetic wallpapers for your phone and PC.",
   applicationName: "Fusion Wallpapers",
   manifest: "/manifest.json",
-  icons: {
-    icon: "/logo.webp",
-    shortcut: "/logo.webp",
-    apple: "/logo.webp",
+  icons: { icon: "/logo.webp", shortcut: "/logo.webp", apple: "/logo.webp" },
+  appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Fusion Wallpapers" },
+  openGraph: {
+    title: "Fusion Wallpapers - Find Your Perfect Anime Wallpaper",
+    description:
+      "Discover and download high-quality anime, gaming, and aesthetic wallpapers for your phone and PC.",
+    url: "/",
+    siteName: "Fusion Wallpapers",
+    type: "website",
+    images: [{ url: ogImg("https://fusion-wallpapers.vercel.app/logo.webp") }],
   },
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "black-translucent",
-    title: "Fusion Wallpapers",
+  twitter: {
+    card: "summary",
+    title: "Fusion Wallpapers - Find Your Perfect Anime Wallpaper",
+    description:
+      "Discover and download high-quality anime, gaming, and aesthetic wallpapers for your phone and PC.",
+    images: [ogImg("https://fusion-wallpapers.vercel.app/logo.webp")],
   },
 };
 
