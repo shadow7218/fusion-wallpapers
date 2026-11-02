@@ -238,27 +238,49 @@ export default function SettingsPage() {
         <div className="md:grid md:grid-cols-2 md:gap-8 md:items-start">
           <div className="md:sticky md:top-6">
             {/* Profile card */}
-            <div className="s-card mt-5" style={{ background: "linear-gradient(120deg, var(--s-card) 62%, var(--s-tint))" }}>
-              <div className="flex items-center gap-4 p-4">
-                <div className="relative">
-                  <div className="rounded-full p-[3px]" style={{ boxShadow: "0 0 0 2px var(--s-accent)" }}>
-                    <AvatarBadge id={avatarId} name={displayName} size={72} />
+            {(() => {
+              const av = AVATARS.find((a) => a.id === avatarId);
+              const from = av?.from ?? "#2a2a32";
+              const to = av?.to ?? "#6a6a78";
+              const light = theme === "light";
+              return (
+                <div
+                  className="s-card mt-4"
+                  style={{
+                    background: light
+                      ? `linear-gradient(135deg, ${to}3d 0%, ${from}1f 100%), #ffffff`
+                      : `linear-gradient(135deg, ${from} 0%, ${to}66 100%), #0b0b0d`,
+                    borderColor: light ? `${to}66` : `${to}55`,
+                  }}
+                >
+                  <div className="flex items-center gap-3 p-3">
+                    <div className="relative shrink-0">
+                      <div
+                        className="rounded-full p-[2px]"
+                        style={{ boxShadow: `0 0 0 2px ${light ? from : "rgba(255,255,255,0.85)"}` }}
+                      >
+                        <AvatarBadge id={avatarId} name={displayName} size={52} />
+                      </div>
+                      <button
+                        type="button"
+                        aria-label="Edit avatar"
+                        onClick={() => document.getElementById("avatar-grid")?.scrollIntoView({ behavior: "smooth" })}
+                        className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center rounded-full border"
+                        style={{ background: "var(--s-bg)", borderColor: "var(--s-border)", color: "var(--s-text)" }}
+                      >
+                        <Pencil className="h-3 w-3" />
+                      </button>
+                    </div>
+                    <div className="min-w-0">
+                      <p className="truncate text-lg font-bold" style={{ color: "var(--s-text)" }}>{displayName}</p>
+                      <p className="truncate text-xs" style={{ color: light ? "var(--s-muted)" : "rgba(255,255,255,0.75)" }}>
+                        {user.email}
+                      </p>
+                    </div>
                   </div>
-                  <button
-                    type="button" aria-label="Edit avatar"
-                    onClick={() => document.getElementById("avatar-grid")?.scrollIntoView({ behavior: "smooth" })}
-                    className="absolute -bottom-1 -right-1 flex h-7 w-7 items-center justify-center rounded-full border"
-                    style={{ background: "var(--s-bg)", borderColor: "var(--s-border)", color: "var(--s-text)" }}
-                  >
-                    <Pencil className="h-3.5 w-3.5" />
-                  </button>
                 </div>
-                <div className="min-w-0">
-                  <p className="truncate text-xl font-bold" style={{ color: "var(--s-text)" }}>{displayName}</p>
-                  <p className="truncate text-sm" style={{ color: "var(--s-muted)" }}>{user.email}</p>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             {/* Avatars */}
             <div id="avatar-grid" className="mb-2 mt-6 flex items-center justify-between px-1">
@@ -378,8 +400,6 @@ export default function SettingsPage() {
             )}
           </div>
         </div>
-
-        <p className="mt-8 text-center text-xs" style={{ color: "var(--s-muted)" }}>Fusion</p>
       </div>
     </div>
   );
