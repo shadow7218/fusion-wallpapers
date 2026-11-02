@@ -345,7 +345,15 @@ export default function FusionWallpapersApp() {
       if (Array.isArray(s) && s.length >= 4) setLastSkel(s);
     } catch {}
     const onResize = () =>
-      setColCount(window.innerWidth >= 1024 ? 4 : window.innerWidth >= 640 ? 3 : 2);
+      setColCount(
+        window.innerWidth >= 1280
+          ? 5
+          : window.innerWidth >= 1024
+          ? 4
+          : window.innerWidth >= 640
+          ? 3
+          : 2
+      );
     onResize();
     window.addEventListener("resize", onResize);
     return () => window.removeEventListener("resize", onResize);
@@ -536,7 +544,7 @@ export default function FusionWallpapersApp() {
     if (!selectedWallpaper)
       window.history.pushState({ wallpaperId: wallpaper.id }, "");
     setSelectedWallpaper(wallpaper);
-    setRelatedVisibleCount(6);
+    setRelatedVisibleCount(Math.max(8, colCount * 2));
     setDownloadStatus(null);
     setIsExpanded(false);
     if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0 });
@@ -547,6 +555,24 @@ export default function FusionWallpapersApp() {
     setDownloadStatus(null);
     setIsExpanded(false);
   };
+
+  const deepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (deepLinkHandled.current || loading) return;
+    deepLinkHandled.current = true;
+    const id = new URLSearchParams(window.location.search).get("w");
+    if (!id) return;
+    window.history.replaceState({}, "", "/");
+    (async () => {
+      let w = wallpapers.find((x) => String(x.id) === id) ?? null;
+      if (!w) {
+        const { data } = await supabase.from("wallpapers").select("*").eq("id", id).maybeSingle();
+        w = (data as Wallpaper) ?? null;
+      }
+      if (w) openWallpaperDetail(w);
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [loading, wallpapers]);
 
   const fetchWallpapers = async (silent = false) => {
     if (!silent) setLoading(true);
@@ -902,21 +928,20 @@ export default function FusionWallpapersApp() {
   ) => {
     e.stopPropagation();
     setActiveMenu(null);
+    const shareUrl = `${window.location.origin}/wallpaper/${wallpaper.id}`;
     if (navigator.share) {
       try {
         await navigator.share({
           title: wallpaper.title,
           text: `Check out this wallpaper on Fusion: ${wallpaper.title}`,
-          url: wallpaper.image_url,
+          url: shareUrl,
         });
-      } catch (err) {
-        // User cancelled share
-      }
+      } catch {}
     } else {
       try {
-        await navigator.clipboard.writeText(wallpaper.image_url);
+        await navigator.clipboard.writeText(shareUrl);
         alert("Wallpaper link copied to clipboard!");
-      } catch (err) {
+      } catch {
         alert("Could not share link.");
       }
     }
@@ -1405,7 +1430,7 @@ export default function FusionWallpapersApp() {
 
   const renderWallpaperCard = (
     item: Wallpaper,
-    options?: { showRemoveSavedBtn?: boolean }
+    options?: { showRemoveSavedBtn?: boolean; fixedRatio?: number }
   ) => {
     const ratio = imageRatios[item.id];
     const isTall = ratio !== undefined && ratio <= 0.57;
@@ -1414,13 +1439,14 @@ export default function FusionWallpapersApp() {
     return (
       <div
         key={item.id}
-        className="break-inside-avoid mb-2 relative flex flex-col"
+        className={`break-inside-avoid relative flex flex-col ${options?.fixedRatio ? "" : "mb-2"}`}
       >
         <div
           onClick={() => openWallpaperDetail(item)}
           style={{
             aspectRatio: String(
-              imageRatios[item.id] === undefined ? 0.75 : Math.max(imageRatios[item.id], 9 / 16)
+              options?.fixedRatio ??
+                (imageRatios[item.id] === undefined ? 0.75 : Math.max(imageRatios[item.id], 9 / 16))
             ),
           }}
           className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.97] transition-transform duration-150 ease-out border ${
@@ -1553,7 +1579,7 @@ export default function FusionWallpapersApp() {
       heights[i] += h;
     }
     return (
-      <div className="flex items-start gap-1.5 -mx-2.5">
+      <div className="flex items-start gap-2">
         {cols.map((col, ci) => (
           <div key={ci} className="flex-1 min-w-0 flex flex-col">
             {col.map((e) =>
@@ -1567,6 +1593,12 @@ export default function FusionWallpapersApp() {
     );
   };
 
+  const renderGrid = (list: Wallpaper[], opts?: { showRemoveSavedBtn?: boolean }) => (
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-2">
+      {list.map((item) => renderWallpaperCard(item, { ...opts, fixedRatio: 3 / 4 }))}
+    </div>
+  );
+
   const renderSkeleton = () => {
     const heights: number[] = Array(colCount).fill(0);
     const cols: number[][] = Array.from({ length: colCount }, () => []);
@@ -1576,7 +1608,7 @@ export default function FusionWallpapersApp() {
       heights[i] += 1 / Math.max(r, 9 / 16) + 0.14;
     });
     return (
-      <div className="flex items-start gap-1.5 -mx-2.5">
+      <div className="flex items-start gap-2">
         {cols.map((col, ci) => (
           <div key={ci} className="flex-1 min-w-0 flex flex-col">
             {col.map((r, i) => (
@@ -1714,7 +1746,7 @@ export default function FusionWallpapersApp() {
             : "bg-black/70 border-white/10"
         }`}
       >
-        <div className="max-w-5xl mx-auto flex items-center justify-between">
+        <div className="max-w-6xl mx-auto flex items-center justify-between">
           <button
             type="button"
             onClick={() => {
@@ -1746,7 +1778,7 @@ export default function FusionWallpapersApp() {
                 typeShape="pill"
                 activeWhite={true}
                 onClick={() => setIsUploadModalOpen(true)}
-                className="px-3.5 py-1.5 text-xs font-bold"
+                className="px-3.5 h-9 text-xs font-bold"
               >
                 <Upload className="h-3.5 w-3.5" />
                 <span>Upload</span>
@@ -1769,7 +1801,7 @@ export default function FusionWallpapersApp() {
                 typeShape="pill"
                 tintOpacity={0.14}
                 onClick={() => setActiveTab("profile")}
-                className="px-3.5 py-1.5 text-xs font-semibold"
+                className="px-3.5 h-9 text-xs font-semibold"
               >
                 <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name} size={20} />
                 <span className="max-w-[85px] truncate">
@@ -1787,7 +1819,7 @@ export default function FusionWallpapersApp() {
                     "SIGN_IN"
                   )
                 }
-                className="px-4 py-1.5 text-xs font-semibold"
+                className="px-4 h-9 text-xs font-semibold"
               >
                 <UserIcon className="h-3.5 w-3.5" />
                 <span>Sign In</span>
@@ -1799,7 +1831,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= LIQUID GLASS SEARCH BAR & PILLS ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
-        <div className="max-w-5xl w-full mx-auto px-4 pt-3 pb-2 z-10 space-y-2.5">
+        <div className="max-w-6xl w-full mx-auto px-4 pt-3 pb-2 z-10 space-y-2.5">
           <GlassContainer
             type="pill"
             tintOpacity={0.12}
@@ -1854,7 +1886,7 @@ export default function FusionWallpapersApp() {
                         setSelectedPillCategory(pillName);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className={`shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] ${
+                      className={`shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] ${
                         isActive
                           ? isLight
                             ? "bg-[#0E2F76] text-white border-transparent"
@@ -1873,7 +1905,7 @@ export default function FusionWallpapersApp() {
                 <button
                   type="button"
                   onClick={backfillDevices}
-                  className="shrink-0 rounded-full border px-4 py-1.5 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
+                  className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
                 >
                   Tag old
                 </button>
@@ -1885,7 +1917,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= CONTENT AREA ================= */}
       {activeTab === "profile" ? (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 pt-3 pb-8 z-10">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 pt-3 pb-8 z-10">
           {user ? (
             <div className="space-y-6">
               <div className="max-w-md md:max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
@@ -2002,7 +2034,7 @@ export default function FusionWallpapersApp() {
                     </GlassButton>
                   </GlassContainer>
                 ) : (
-                  renderMasonry(savedWallpapersList, { showRemoveSavedBtn: true })
+                  renderGrid(savedWallpapersList, { showRemoveSavedBtn: true })
                 )}
               </div>
             </div>
@@ -2061,7 +2093,7 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-8">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 z-10 pb-8">
           {exploreView === "grid" ? (
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2">
@@ -2147,7 +2179,7 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : (
-        <main className="flex-1 max-w-5xl w-full mx-auto px-4 z-10 pb-6 flex flex-col justify-between">
+        <main className="flex-1 max-w-6xl w-full mx-auto px-4 z-10 pb-6 flex flex-col justify-between">
           <div>
             {/* ================= PC ONLY SECTION: HERO BANNER & TOP 10 TODAY ================= */}
             {activeTab === "home" &&
@@ -2352,6 +2384,12 @@ export default function FusionWallpapersApp() {
               </div>
             )}
 
+            {activeTab === "home" && (
+              <h2 className={`pt-2 pb-3 text-lg sm:text-xl font-bold tracking-tight ${isLight ? "text-[#0E2F76]" : "text-white"}`}>
+                {searchQuery ? "Results" : selectedPillCategory === "All" ? "All Wallpapers" : selectedPillCategory}
+              </h2>
+            )}
+
             {loading ? (
               renderSkeleton()
             ) : fetchError ? (
@@ -2391,10 +2429,12 @@ export default function FusionWallpapersApp() {
                 </p>
               </GlassContainer>
             ) : (
-              renderMasonry(
-                activeTab === "home" ? orderFeed(filteredWallpapers) : filteredWallpapers,
-                { pending: activeTab === "home" ? pendingUploads : [] }
-              )
+              activeTab === "saved"
+                ? renderGrid(filteredWallpapers)
+                : renderMasonry(
+                    activeTab === "home" ? orderFeed(filteredWallpapers) : filteredWallpapers,
+                    { pending: activeTab === "home" ? pendingUploads : [] }
+                  )
             )}
           </div>
 
@@ -2408,7 +2448,7 @@ export default function FusionWallpapersApp() {
         className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
         <div
-          className="relative rounded-full p-1.5"
+          className="fusion-nav relative rounded-full p-1.5"
           style={{
             background:
               "linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.01)), rgba(20,20,22,0.30)",
@@ -2528,8 +2568,8 @@ export default function FusionWallpapersApp() {
             isLight ? "bg-[#F4FEFF]" : "bg-[#000000]"
           }`}
         >
-          <div className="relative z-10 max-w-3xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
-            <div className="w-full flex items-center justify-between mb-2.5">
+          <div className="relative z-10 max-w-6xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
+            <div className="w-full max-w-3xl flex items-center justify-between mb-2.5">
               <GlassButton
                 typeShape="circle"
                 size={40}
@@ -2727,15 +2767,13 @@ export default function FusionWallpapersApp() {
                 </p>
               ) : (
                 <>
-                  <div className="mx-2.5">
-                    {renderMasonry(relatedWallpapers.slice(0, relatedVisibleCount))}
-                  </div>
+                  {renderMasonry(relatedWallpapers.slice(0, relatedVisibleCount))}
                   {relatedVisibleCount < relatedWallpapers.length && (
                     <div className="mt-4 text-center">
                       <GlassButton
                         typeShape="pill"
                         onClick={() =>
-                          setRelatedVisibleCount((prev) => prev + 6)
+                          setRelatedVisibleCount((prev) => prev + Math.max(8, colCount * 2))
                         }
                         className="px-5 h-9 text-xs font-semibold"
                       >
