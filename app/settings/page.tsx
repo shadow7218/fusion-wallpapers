@@ -384,9 +384,8 @@ const css = `
 .theme-light .s-root{--s-bg:#F4FEFF;--s-card:#ffffff;--s-border:rgba(14,47,118,.14);--s-text:#0E2F76;--s-muted:rgba(14,47,118,.6);--s-tint:rgba(109,91,240,.10)}
 .s-card{background:var(--s-card);border:1px solid var(--s-border);border-radius:24px;overflow:hidden}
 .s-item + .s-item{border-top:1px solid var(--s-border)}
-.s-circle{display:flex;height:44px;width:44px;align-items:center;justify-content:center;border-radius:9999px;border:1px solid var(--s-border);background:var(--s-card);color:var(--s-text);transition:transform .15s ease-out}
-.s-circle:active{transform:scale(.94)}
+.s-circle{height:44px;width:44px;border-radius:9999px;color:var(--s-text)}
 .s-input{height:40px;min-width:0;flex:1;border-radius:9999px;border:1px solid var(--s-border);background:transparent;padding:0 14px;font-size:13px;color:var(--s-text);outline:none}
 .s-btn{height:40px;border-radius:9999px;background:var(--s-text);padding:0 18px;font-size:12px;font-weight:700;color:var(--s-bg)}
-.s-btn-ghost{display:inline-flex;height:40px;align-items:center;gap:6px;border-radius:9999px;border:1px solid var(--s-border);padding:0 14px;font-size:12px;font-weight:600;color:var(--s-text)}
+.s-btn-ghost{height:40px;border-radius:9999px;padding:0 14px;font-size:12px;font-weight:600;color:var(--s-text)}
 `;
