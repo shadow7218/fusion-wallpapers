@@ -6,12 +6,15 @@ export default function OAuthButtons({
   onGoogle: () => void;
   onApple?: () => void; // no longer used, kept so page.tsx doesn't need changing
 }) {
+  const btn =
+    "fusion-btn flex h-11 w-full gap-2 rounded-full text-xs font-bold text-white";
+
   return (
     <div className="space-y-2 pt-1">
       <button
         type="button"
         onClick={onGoogle}
-        className="flex h-11 w-full items-center justify-center gap-2 rounded-full border border-white/15 bg-white/[0.06] text-xs font-bold text-white transition-transform duration-150 active:scale-[0.98]"
+        className={btn}
       >
         <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white text-[11px] font-black text-black">
           G
