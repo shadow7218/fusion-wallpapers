@@ -310,6 +310,7 @@ export default function FusionWallpapersApp() {
   const [downloadChoice, setDownloadChoice] = useState<{ current: Wallpaper; slides: Wallpaper[] } | null>(null);
   const swipeStart = useRef<{ x: number; y: number } | null>(null);
   const justSwiped = useRef<number>(0);
+  const [migrateMsg, setMigrateMsg] = useState<string>("");
   const [uploadShowInHero, setUploadShowInHero] = useState<boolean>(false);
   const [uploadTop10Rank, setUploadTop10Rank] = useState<string>("none");
   const [uploading, setUploading] = useState<boolean>(false);
@@ -1308,6 +1309,54 @@ export default function FusionWallpapersApp() {
     }
   };
 
+  const migrateOldToCloudinary = async () => {
+    if (!isAdmin) return;
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const preset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+    if (!cloudName || !preset) {
+      alert("Cloudinary is not set up (missing environment variables).");
+      return;
+    }
+    const todo = wallpapers.filter((w) => !w.image_url.includes("res.cloudinary.com"));
+    if (!todo.length) {
+      alert("Everything is already on Cloudinary.");
+      return;
+    }
+    if (!confirm(`Move ${todo.length} wallpapers to Cloudinary? Keep this page open until it finishes.`)) return;
+
+    let ok = 0;
+    const failed: string[] = [];
+    for (let i = 0; i < todo.length; i++) {
+      const w = todo[i];
+      setMigrateMsg(`Moving ${i + 1}/${todo.length}…`);
+      try {
+        const fd = new FormData();
+        fd.append("file", w.image_url);
+        fd.append("upload_preset", preset);
+        const res = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+          method: "POST",
+          body: fd,
+        });
+        const up = await res.json();
+        if (!res.ok) throw new Error(up?.error?.message || "upload failed");
+        const { error } = await supabase
+          .from("wallpapers")
+          .update({ image_url: up.secure_url, storage_path: up.public_id })
+          .eq("id", w.id);
+        if (error) throw error;
+        ok++;
+      } catch {
+        failed.push(w.title);
+      }
+    }
+    setMigrateMsg("");
+    alert(
+      `Moved ${ok} of ${todo.length}.` +
+        (failed.length ? `\nFailed (probably over 10 MB): ${failed.join(", ")}` : "")
+    );
+    await fetchWallpapers(true);
+  };
+
   const backfillDevices = async () => {
     if (!isAdmin) return;
     const todo = wallpapers.filter((w) => !getDevice(w));
@@ -2111,13 +2160,22 @@ export default function FusionWallpapersApp() {
                 }
               )}
               {isAdmin && (
-                <button
-                  type="button"
-                  onClick={backfillDevices}
-                  className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
-                >
-                  Tag old
-                </button>
+                <>
+                  <button
+                    type="button"
+                    onClick={migrateOldToCloudinary}
+                    className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold bg-white/[0.07] text-white/85 border-white/10"
+                  >
+                    {migrateMsg || "Move to Cloudinary"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={backfillDevices}
+                    className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
+                  >
+                    Tag old
+                  </button>
+                </>
               )}
             </div>
           )}
