@@ -40,6 +40,7 @@ import {
   Sun,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import PasswordInput from "@/components/PasswordInput";
 import {
   Dialog,
   DialogContent,
@@ -302,6 +303,8 @@ export default function FusionWallpapersApp() {
   const [uploadCategory, setUploadCategory] = useState<string>("none");
   const [uploadFiles, setUploadFiles] = useState<{ id: string; file: File; url: string }[]>([]);
   const [batchIndex, setBatchIndex] = useState<Record<string, number>>({});
+  const [slideAnim, setSlideAnim] = useState<Record<string, { from: Wallpaper; dir: 1 | -1; n: number }>>({});
+  const [detailDir, setDetailDir] = useState<0 | 1 | -1>(0);
   const [detailSlides, setDetailSlides] = useState<Wallpaper[] | null>(null);
   const [menuSlides, setMenuSlides] = useState<Wallpaper[] | null>(null);
   const [downloadChoice, setDownloadChoice] = useState<{ current: Wallpaper; slides: Wallpaper[] } | null>(null);
@@ -546,15 +549,36 @@ export default function FusionWallpapersApp() {
   }, [selectedWallpaper]);
 
   const openWallpaperDetail = (wallpaper: Wallpaper, slides?: Wallpaper[]) => {
-    setDetailClosing(false);
     setActiveMenu(null);
-    if (!selectedWallpaper) window.history.pushState({ wallpaperId: wallpaper.id }, "");
-    setSelectedWallpaper(wallpaper);
-    setDetailSlides(slides && slides.length > 1 ? slides : null);
-    setRelatedVisibleCount(Math.max(8, colCount * 2));
-    setDownloadStatus(null);
-    setIsExpanded(false);
-    if (detailScrollRef.current) detailScrollRef.current.scrollTo({ top: 0 });
+    const apply = () => {
+      setSelectedWallpaper(wallpaper);
+      setDetailSlides(slides && slides.length > 1 ? slides : null);
+      setRelatedVisibleCount(Math.max(8, colCount * 2));
+      setDownloadStatus(null);
+      setIsExpanded(false);
+      setDetailDir(0);
+    };
+    const el = detailScrollRef.current;
+
+    // Opened from "Related": glide up to the top, swap the picture as it arrives
+    if (selectedWallpaper && el) {
+      el.scrollTo({ top: 0, behavior: "smooth" });
+      if (el.scrollTop < 260) {
+        apply();
+      } else {
+        const t0 = performance.now();
+        const tick = () => {
+          if (el.scrollTop < 260 || performance.now() - t0 > 900) apply();
+          else requestAnimationFrame(tick);
+        };
+        requestAnimationFrame(tick);
+      }
+      return;
+    }
+
+    window.history.pushState({ wallpaperId: wallpaper.id }, "");
+    apply();
+    if (el) el.scrollTo({ top: 0 });
   };
 
   const closeWallpaperDetail = () => {
@@ -1527,6 +1551,7 @@ export default function FusionWallpapersApp() {
     const i = detailSlides.findIndex((s) => s.id === selectedWallpaper.id);
     const next = detailSlides[i + dir];
     if (next) {
+      setDetailDir(dir);
       setSelectedWallpaper(next);
       setIsExpanded(false);
     }
@@ -1539,6 +1564,23 @@ export default function FusionWallpapersApp() {
     const slides = options?.slides && options.slides.length > 1 ? options.slides : null;
     const idx = slides ? Math.min(batchIndex[item.id] ?? 0, slides.length - 1) : 0;
     const current = slides ? slides[idx] : item;
+    const anim = slideAnim[item.id];
+    const step = (d: 1 | -1) => {
+      if (!slides) return;
+      const next = Math.min(Math.max(idx + d, 0), slides.length - 1);
+      if (next === idx) return;
+      const n = (slideAnim[item.id]?.n ?? 0) + 1;
+      setSlideAnim((p) => ({ ...p, [item.id]: { from: current, dir: d, n } }));
+      setBatchIndex((p) => ({ ...p, [item.id]: next }));
+      window.setTimeout(() => {
+        setSlideAnim((p) => {
+          if (p[item.id]?.n !== n) return p;
+          const c = { ...p };
+          delete c[item.id];
+          return c;
+        });
+      }, 480);
+    };
     const known = imageRatios[current.id];
     const boxRatio = known === undefined ? 0.75 : Math.max(known, 9 / 16);
     const isMenuOpen = activeMenu?.wallpaper.id === current.id;
@@ -1553,16 +1595,28 @@ export default function FusionWallpapersApp() {
             openWallpaperDetail(current, slides ?? undefined);
           }}
           onPointerDown={slides ? onSwipeStart : undefined}
-          onPointerUp={slides ? (e) => onSwipeEnd(e, (d) => stepBatch(item.id, slides.length, d)) : undefined}
+          onPointerUp={slides ? (e) => onSwipeEnd(e, step) : undefined}
           style={{ aspectRatio: String(boxRatio), touchAction: slides ? "pan-y" : undefined }}
-          className={`relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.98] transition-transform duration-150 ease-out border ${
+          className={`fusion-box relative w-full overflow-hidden rounded-2xl cursor-pointer active:scale-[0.98] border ${
             isLight
-              ? "bg-[#A9C0E0]/25 border-[#0E2F76]/15 shadow-[0_6px_16px_rgba(14,47,118,0.08)]"
-              : "bg-[#0a0a0a] border-white/10"
+              ? "bg-[#A9C0E0]/25 border-[#0E2F76]/35 shadow-[0_8px_22px_rgba(14,47,118,0.20)]"
+              : "bg-[#0a0a0a] border-white/30"
           }`}
           onContextMenu={(e) => e.preventDefault()}
         >
           {known === undefined && <div className="fusion-shimmer absolute inset-0" />}
+          {anim && (
+            <img
+              key={`out-${anim.n}`}
+              src={img(anim.from, 500)}
+              alt=""
+              aria-hidden
+              draggable={false}
+              className={`absolute inset-0 h-full w-full object-cover pointer-events-none select-none ${
+                anim.dir === 1 ? "fusion-out-left" : "fusion-out-right"
+              }`}
+            />
+          )}
           <img
             key={current.id}
             src={img(current, 500)}
@@ -1574,9 +1628,9 @@ export default function FusionWallpapersApp() {
               setImageRatios((prev) => ({ ...prev, [current.id]: naturalWidth / naturalHeight }));
             }}
             onContextMenu={(e) => e.preventDefault()}
-            className={`absolute inset-0 h-full w-full object-cover pointer-events-none select-none transition-opacity duration-300 ease-out ${
-              known === undefined ? "opacity-0" : "opacity-100"
-            }`}
+            className={`absolute inset-0 h-full w-full object-cover pointer-events-none select-none ${
+              anim ? (anim.dir === 1 ? "fusion-in-right" : "fusion-in-left") : ""
+            } ${known === undefined ? "opacity-0" : "opacity-100"}`}
           />
           <div className="absolute inset-0 z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
 
@@ -1585,7 +1639,7 @@ export default function FusionWallpapersApp() {
               type="button"
               aria-label="Previous wallpaper"
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); stepBatch(item.id, slides.length, -1); }}
+              onClick={(e) => { e.stopPropagation(); step(-1); }}
               className={`${arrow} left-1.5`}
             >
               <ChevronLeft className="h-4 w-4" />
@@ -1596,7 +1650,7 @@ export default function FusionWallpapersApp() {
               type="button"
               aria-label="Next wallpaper"
               onPointerDown={(e) => e.stopPropagation()}
-              onClick={(e) => { e.stopPropagation(); stepBatch(item.id, slides.length, 1); }}
+              onClick={(e) => { e.stopPropagation(); step(1); }}
               className={`${arrow} right-1.5`}
             >
               <ChevronRight className="h-4 w-4" />
@@ -2752,9 +2806,11 @@ export default function FusionWallpapersApp() {
               onPointerDown={detailSlides ? onSwipeStart : undefined}
               onPointerUp={detailSlides ? (e) => onSwipeEnd(e, stepDetail) : undefined}
               style={{ touchAction: detailSlides ? "pan-y" : undefined }}
-              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border border-white/15 shadow-2xl mx-auto w-fit max-w-full mb-3 animate-in fade-in duration-200 ${
-                detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""
-              }`}
+              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border mx-auto w-fit max-w-full mb-3 fusion-photo-in ${
+                isLight
+                  ? "border-[#0E2F76]/25 shadow-[0_30px_60px_-15px_rgba(14,47,118,0.55),0_12px_24px_-8px_rgba(14,47,118,0.35),0_2px_6px_rgba(14,47,118,0.2)]"
+                  : "border-white/25 shadow-2xl"
+              } ${detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""}`}
             >
               <img
                 src={
@@ -2770,7 +2826,7 @@ export default function FusionWallpapersApp() {
                   detailIsTall && !isExpanded
                     ? "w-auto max-w-full max-h-[62vh] aspect-[9/16] object-cover"
                     : "w-auto max-w-full h-auto max-h-[75vh] object-contain"
-                }`}
+                } ${detailDir === 1 ? "fusion-in-right" : detailDir === -1 ? "fusion-in-left" : ""}`}
               />
 
               <div
@@ -3108,8 +3164,7 @@ export default function FusionWallpapersApp() {
                     Forgot password?
                   </button>
                 </div>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={authPassword}
@@ -3160,8 +3215,7 @@ export default function FusionWallpapersApp() {
                 <label className="text-[11px] font-semibold text-white/90 block">
                   Create Password (min. 6 chars)
                 </label>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={authPassword}
@@ -3173,8 +3227,7 @@ export default function FusionWallpapersApp() {
                 <label className="text-[11px] font-semibold text-white/90 block">
                   Confirm Password
                 </label>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={authConfirmPassword}
@@ -3293,8 +3346,7 @@ export default function FusionWallpapersApp() {
                 <label className="text-[11px] font-semibold text-white/90 block">
                   New Password (min. 6 chars)
                 </label>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={authPassword}
@@ -3306,8 +3358,7 @@ export default function FusionWallpapersApp() {
                 <label className="text-[11px] font-semibold text-white/90 block">
                   Confirm New Password
                 </label>
-                <Input
-                  type="password"
+                <PasswordInput
                   required
                   placeholder="••••••••"
                   value={authConfirmPassword}
@@ -3457,7 +3508,7 @@ export default function FusionWallpapersApp() {
           style={{
             background: "rgba(10, 10, 14, 0.88)",
           }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5"
+          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5 max-h-[88vh] overflow-y-auto overscroll-contain"
         >
           <DialogHeader>
             <DialogTitle className="text-base font-black text-white">
