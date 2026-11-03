@@ -5,18 +5,14 @@ import { useRouter } from "next/navigation";
 import { db, type Wallpaper, type AppUser } from "@/lib/db";
 import {
   Download,
-  Upload,
   LogOut,
   User as UserIcon,
   Loader2,
   Trash2,
-  Search,
   Bookmark,
   Home,
   Compass,
-  X,
   Check,
-  Settings,
   Eye,
   EyeOff,
   KeyRound,
@@ -35,8 +31,6 @@ import {
   ChevronRight,
   ExternalLink,
   Flame,
-  Moon,
-  Sun,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import PasswordInput from "@/components/PasswordInput";
@@ -50,7 +44,7 @@ import {
 
 import { animeCategories } from "../config/animeCategories";
 import { groupBatches, makeBatchTags, getBatchId } from "@/lib/batch";
-import { img, PREVIEW_TAG } from "@/lib/img";
+import { img } from "@/lib/img";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
 import OAuthButtons from "@/components/OAuthButtons";
 import SlidingNav from "@/components/SlidingNav";
@@ -59,6 +53,11 @@ import {
   GlassButton,
   LiquidGlassShaderDefs,
 } from "@/components/liquid-glass/LiquidGlass";
+
+import Header from "@/components/fusion/Header";
+import SearchBar from "@/components/fusion/SearchBar";
+import CategoryPills from "@/components/fusion/CategoryPills";
+import Footer from "@/components/fusion/Footer";
 
 interface UserProfile {
   id: string;
@@ -380,7 +379,6 @@ export default function FusionWallpapersApp() {
     };
     document.addEventListener("visibilitychange", onVis);
     return () => document.removeEventListener("visibilitychange", onVis);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -396,10 +394,6 @@ export default function FusionWallpapersApp() {
     }
     if (themeLoaded.current) localStorage.setItem("fusion-theme", theme);
   }, [theme]);
-
-  const toggleTheme = () => {
-    setTheme((prev) => (prev === "dark" ? "light" : "dark"));
-  };
 
   useEffect(() => {
     const init = async () => {
@@ -514,7 +508,7 @@ export default function FusionWallpapersApp() {
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
   }, [selectedWallpaper]);
-  
+
   useEffect(() => {
     setDetailSrc(null);
     if (!selectedWallpaper) return;
@@ -540,7 +534,6 @@ export default function FusionWallpapersApp() {
     };
     const el = detailScrollRef.current;
 
-    // Opened from "Related": glide up to the top, swap the picture as it arrives
     if (selectedWallpaper && el) {
       el.scrollTo({ top: 0, behavior: "smooth" });
       if (el.scrollTop < 260) {
@@ -586,7 +579,6 @@ export default function FusionWallpapersApp() {
       }
       if (w) openWallpaperDetail(w);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [loading, wallpapers]);
 
   const fetchWallpapers = async (silent = false) => {
@@ -1442,18 +1434,6 @@ export default function FusionWallpapersApp() {
     </>
   );
 
-  const renderBuiltByFusionFooter = () => (
-    <footer className="w-full pt-10 pb-6 text-center select-none">
-      <p
-        className={`text-[11px] sm:text-xs font-medium tracking-[0.18em] uppercase ${
-          isLight ? "text-[#0E2F76]/50" : "text-white/40"
-        }`}
-      >
-        Built by Fusion
-      </p>
-    </footer>
-  );
-
   const onSwipeStart = (e: React.PointerEvent) => {
     swipeStart.current = { x: e.clientX, y: e.clientY };
   };
@@ -1629,7 +1609,7 @@ export default function FusionWallpapersApp() {
   };
 
   const orderFeed = (list: Wallpaper[]) => {
-    const NEW_MS = 48 * 60 * 60 * 1000; // "new" = last 48 hours
+    const NEW_MS = 48 * 60 * 60 * 1000;
     const now = Date.now();
     const fresh = list
       .filter((w) => now - new Date(w.created_at).getTime() < NEW_MS)
@@ -1859,203 +1839,52 @@ export default function FusionWallpapersApp() {
         </GlassContainer>
       )}
 
-      {/* ================= STICKY HEADER ================= */}
-      <header
-        className={`sticky top-0 z-30 backdrop-blur-xl px-3 md:px-4 pt-3 pb-2.5 border-b transition-colors ${
-          isLight
-            ? "bg-[#F4FEFF]/80 border-[#0E2F76]/10 shadow-[0_2px_12px_rgba(14,47,118,0.08)]"
-            : "bg-black/70 border-white/10"
-        }`}
-      >
-        <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab("home");
-              setSearchQuery("");
-              window.scrollTo({ top: 0, behavior: "smooth" });
-            }}
-            className="flex items-center gap-2.5 text-left focus:outline-none group active:scale-95 transition-transform"
-          >
-            <div className="h-8 w-8 rounded-xl bg-white/5 border border-white/20 flex items-center justify-center overflow-hidden shrink-0">
-              <img
-                src="/logo.webp"
-                alt="Fusion Logo"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <span
-              className={`text-base sm:text-lg font-black tracking-[0.22em] uppercase ${
-                isLight ? "text-[#0E2F76]" : "text-white"
-              }`}
-            >
-              FUSION
-            </span>
-          </button>
+      {/* ================= HEADER ================= */}
+      <Header
+        isLight={isLight}
+        user={user}
+        profile={profile}
+        activeTab={activeTab}
+        isAdmin={isAdmin}
+        onHomeClick={() => {
+          setActiveTab("home");
+          setSearchQuery("");
+          window.scrollTo({ top: 0, behavior: "smooth" });
+        }}
+        onProfileClick={() => setActiveTab("profile")}
+        onSettingsClick={() => router.push("/settings")}
+        onUploadClick={() => setIsUploadModalOpen(true)}
+        onSignInClick={() =>
+          requireAuthForAction(
+            "Sign in to save wallpapers and unlock full-resolution downloads.",
+            { type: "profile_tab" },
+            "SIGN_IN"
+          )
+        }
+      />
 
-          <div className="flex items-center gap-2">
-            {isAdmin && (
-              <GlassButton
-                typeShape="pill"
-                activeWhite={true}
-                onClick={() => setIsUploadModalOpen(true)}
-                className="px-3.5 h-9 text-xs font-bold"
-              >
-                <Upload className="h-3.5 w-3.5" />
-                <span>Upload</span>
-              </GlassButton>
-            )}
-
-            {user && activeTab === "profile" ? (
-              <GlassButton
-                typeShape="pill"
-                tintOpacity={0.14}
-                aria-label="Open settings"
-                onClick={() => router.push("/settings")}
-                className="h-9 px-4 gap-2 text-xs font-semibold shrink-0"
-              >
-                <Settings className={`h-4 w-4 ${isLight ? "text-[#0E2F76]" : "text-white"}`} />
-                <span>Settings</span>
-              </GlassButton>
-            ) : user ? (
-              <GlassButton
-                typeShape="pill"
-                tintOpacity={0.14}
-                onClick={() => setActiveTab("profile")}
-                className="px-3.5 h-9 text-xs font-semibold"
-              >
-                <AvatarBadge id={user.avatarId} name={profile?.display_name} size={20} />
-                <span className="max-w-[85px] truncate">
-                  {profile?.display_name || "Shadow"}
-                </span>
-              </GlassButton>
-            ) : (
-              <GlassButton
-                typeShape="pill"
-                tintOpacity={0.14}
-                onClick={() =>
-                  requireAuthForAction(
-                    "Sign in to save wallpapers and unlock full-resolution downloads.",
-                    { type: "profile_tab" },
-                    "SIGN_IN"
-                  )
-                }
-                className="px-4 h-9 text-xs font-semibold"
-              >
-                <UserIcon className="h-3.5 w-3.5" />
-                <span>Sign In</span>
-              </GlassButton>
-            )}
-          </div>
-        </div>
-      </header>
-
-      {/* ================= LIQUID GLASS SEARCH BAR & PILLS ================= */}
+      {/* ================= SEARCH BAR & PILLS ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
         <div className="max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-2 z-10 space-y-2.5">
-          <GlassContainer
-            type="pill"
-            tintOpacity={0.12}
-            blurRadius={16}
-            className="w-full h-11 px-4"
-          >
-            <div className="flex items-center w-full h-full">
-              <Search
-                className={`h-4 w-4 mr-3 shrink-0 ${
-                  isLight ? "text-[#0E2F76]/60" : "text-white/60"
-                }`}
-              />
-              <input
-                ref={searchInputRef}
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Search wallpapers, anime, moods..."
-                className={`w-full bg-transparent text-xs sm:text-sm focus:outline-none font-medium ${
-                  isLight
-                    ? "text-[#0E2F76] placeholder:text-[#0E2F76]/45"
-                    : "text-white placeholder:text-white/45"
-                }`}
-              />
-              {searchQuery ? (
-                <button
-                  type="button"
-                  aria-label="Clear search"
-                  onClick={() => setSearchQuery("")}
-                  className={`p-1 ${
-                    isLight
-                      ? "text-[#0E2F76]/70 hover:text-[#0E2F76]"
-                      : "text-white/70 hover:text-white"
-                  }`}
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              ) : null}
-            </div>
-          </GlassContainer>
+          <SearchBar
+            isLight={isLight}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            searchInputRef={searchInputRef}
+          />
 
           {activeTab === "home" && !searchQuery && (
-            <div className="relative flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 pb-1">
-              {pillBox && (
-                <span
-                  aria-hidden
-                  className="pointer-events-none absolute top-0.5 h-8 rounded-full transition-[transform,width] duration-[380ms] ease-[cubic-bezier(0.34,1.3,0.64,1)]"
-                  style={{
-                    left: 0,
-                    width: pillBox.width,
-                    transform: `translateX(${pillBox.left}px)`,
-                    background: isLight ? "#0E2F76" : "#ffffff",
-                  }}
-                />
-              )}
-              {["All", "Phone", "PC", ...animeCategories.filter((c) => c.showOnHome !== false).map((c) => c.name)].map(
-                (pillName) => {
-                  const isActive = selectedPillCategory === pillName;
-                  return (
-                    <button
-                      key={pillName}
-                      ref={(el) => {
-                        pillRefs.current[pillName] = el;
-                      }}
-                      type="button"
-                      onClick={() => {
-                        setSelectedPillCategory(pillName);
-                        window.scrollTo({ top: 0, behavior: "smooth" });
-                      }}
-                      className={`relative z-10 shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,color] duration-200 ease-out active:scale-[0.96] ${
-                        isActive
-                          ? (pillBox
-                              ? isLight ? "text-white" : "text-black"
-                              : isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black") + " border-transparent"
-                          : isLight
-                          ? "bg-[#0E2F76]/10 text-[#0E2F76] border-[#0E2F76]/15"
-                          : "bg-white/[0.07] text-white/85 border-white/10"
-                      }`}
-                    >
-                      {pillName}
-                    </button>
-                  );
-                }
-              )}
-              {isAdmin && (
-                <>
-                  <button
-                    type="button"
-                    onClick={migrateOldToCloudinary}
-                    className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold bg-white/[0.07] text-white/85 border-white/10"
-                  >
-                    {migrateMsg || "Move to Cloudinary"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={backfillDevices}
-                    className="shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] bg-white/[0.07] text-white/85 border-white/10"
-                  >
-                    Tag old
-                  </button>
-                </>
-              )}
-            </div>
+            <CategoryPills
+              isLight={isLight}
+              selectedPillCategory={selectedPillCategory}
+              setSelectedPillCategory={setSelectedPillCategory}
+              pillRefs={pillRefs}
+              pillBox={pillBox}
+              isAdmin={isAdmin}
+              migrateOldToCloudinary={migrateOldToCloudinary}
+              backfillDevices={backfillDevices}
+              migrateMsg={migrateMsg}
+            />
           )}
         </div>
       )}
@@ -2601,7 +2430,7 @@ export default function FusionWallpapersApp() {
             )}
           </div>
 
-          {activeTab === "home" && !searchQuery && renderBuiltByFusionFooter()}
+          {activeTab === "home" && !searchQuery && <Footer isLight={isLight} />}
         </main>
       )}
 
@@ -2794,19 +2623,18 @@ export default function FusionWallpapersApp() {
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => setIsExpanded(!isExpanded)}
                   className="fusion-bounce absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/35 bg-white/[0.035] text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-1px_2px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.12)] transition-transform duration-200 active:scale-90"
-
                   style={{
-                  backdropFilter: "blur(2px) saturate(110%)",
-                  WebkitBackdropFilter: "blur(2px) saturate(110%)",
-            }}
-           >
-                 {isExpanded ? (
-                 <Minimize2 className="h-5 w-5" strokeWidth={2.2} />
+                    backdropFilter: "blur(2px) saturate(110%)",
+                    WebkitBackdropFilter: "blur(2px) saturate(110%)",
+                  }}
+                >
+                  {isExpanded ? (
+                    <Minimize2 className="h-5 w-5" strokeWidth={2.2} />
                   ) : (
-                <Maximize2 className="h-5 w-5" strokeWidth={2.2} />
-            )}
-               </button>
-            )}
+                    <Maximize2 className="h-5 w-5" strokeWidth={2.2} />
+                  )}
+                </button>
+              )}
 
               {detailSlides && (
                 <>
@@ -3193,7 +3021,7 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
+                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
                 />
               </div>
               {authError && (
