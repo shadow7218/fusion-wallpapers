@@ -72,20 +72,28 @@ export default function SlidingNav({
       {/* sliding pill */}
       <span
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 rounded-full will-change-transform"
+        className="pointer-events-none absolute inset-y-0 left-0 will-change-transform"
         style={{
           width: `${100 / n}%`,
           transform:
             dragLeft !== null ? `translateX(${dragLeft}px)` : `translateX(${activeIndex * 100}%)`,
-          transition: dragLeft !== null ? "none" : "transform 520ms cubic-bezier(0.34, 1.4, 0.64, 1)",
-          background: isLight
-            ? "#0E2F76"
-            : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.10))",
-          boxShadow: isLight
-            ? "0 6px 16px rgba(14,47,118,0.30)"
-            : "inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(0,0,0,0.4)",
+          transition:
+            dragLeft !== null ? "none" : "transform 460ms cubic-bezier(0.34, 1.3, 0.64, 1)",
         }}
-      />
+      >
+        <span
+          key={activeIndex}
+          className="fusion-stretch absolute inset-0 rounded-full"
+          style={{
+            background: isLight
+              ? "#0E2F76"
+              : "linear-gradient(180deg, rgba(255,255,255,0.24), rgba(255,255,255,0.10))",
+            boxShadow: isLight
+              ? "0 6px 16px rgba(14,47,118,0.30)"
+              : "inset 0 1px 0 rgba(255,255,255,0.28), 0 2px 10px rgba(0,0,0,0.4)",
+          }}
+        />
+      </span>
       {tabs.map((t, i) => {
         const on = i === shownIndex;
         return (
@@ -105,7 +113,7 @@ export default function SlidingNav({
                 : "text-white/70"
             }`}
           >
-            <t.Icon className={`h-4 w-4 transition-transform duration-300 ${on ? "scale-110" : ""}`} />
+            <t.Icon key={on ? "on" : "off"} className={`h-4 w-4 ${on ? "fusion-icon-settle" : ""}`} />
             <span className="text-[9px] font-bold tracking-wide">{t.label}</span>
           </button>
         );
