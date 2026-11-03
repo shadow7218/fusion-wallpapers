@@ -2193,6 +2193,23 @@ export default function FusionWallpapersApp() {
                   borderRadius={24}
                   tintOpacity={0.14}
                   className="p-4 h-full flex flex-col justify-center"
+                  style={{
+                    ...(() => {
+                      const avatar = AVATARS.find(
+                        (item) => item.id === user.user_metadata?.avatar_id
+                      );
+
+                      const from = avatar?.from ?? "#2a2a32";
+                      const to = avatar?.to ?? "#6a6a78";
+
+                      return {
+                        background: isLight
+                          ? `linear-gradient(135deg, ${to}3d 0%, ${from}1f 100%), #ffffff`
+                          : `linear-gradient(135deg, ${from} 0%, ${to}66 100%), #0b0b0d`,
+                        borderColor: isLight ? `${to}66` : `${to}55`,
+                      };
+                    })(),
+                  }}
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
