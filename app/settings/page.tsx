@@ -211,7 +211,7 @@ export default function SettingsPage() {
   return (
     <div className="s-root min-h-screen">
       <style>{css}</style>
-      <div className="mx-auto w-full max-w-md md:max-w-4xl px-4 pb-14 pt-4">
+      <div className="fusion-page mx-auto w-full max-w-md md:max-w-4xl px-4 pb-14 pt-4">
         {/* Top bar */}
         <div className="flex items-center justify-between">
           <button type="button" aria-label="Back" onClick={() => router.back()} className="s-circle">
@@ -313,7 +313,7 @@ export default function SettingsPage() {
                   right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
                 />
                 {open === "name" && (
-                  <div className="flex gap-2 px-4 pb-4">
+                  <div className="fusion-rise flex gap-2 px-4 pb-4">
                     <input value={nameInput} onChange={(e) => setNameInput(e.target.value)} placeholder="Display name" className="s-input" />
                     <button type="button" onClick={saveName} disabled={busy} className="s-btn">Save</button>
                   </div>
@@ -325,7 +325,7 @@ export default function SettingsPage() {
                   right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
                 />
                 {open === "password" && (
-                  <div className="flex gap-2 px-4 pb-4">
+                  <div className="fusion-rise flex gap-2 px-4 pb-4">
                     <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="New password (min. 6)" className="s-input" />
                     <button type="button" onClick={savePassword} disabled={busy} className="s-btn">Save</button>
                   </div>
@@ -340,7 +340,7 @@ export default function SettingsPage() {
                   right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
                 />
                 {open === "privacy" && (
-                  <p className="px-4 pb-4 text-xs" style={{ color: "var(--s-muted)" }}>
+                  <p className="fusion-rise px-4 pb-4 text-xs" style={{ color: "var(--s-muted)" }}>
                     Your email is masked on your profile by default and is never shown on wallpapers you save.
                   </p>
                 )}
