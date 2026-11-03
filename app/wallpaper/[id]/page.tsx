@@ -1,23 +1,7 @@
 import type { Metadata } from "next";
 import OpenInApp from "@/components/OpenInApp";
 import { ogImg } from "@/lib/img";
-
-const SUPA = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-const KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY!;
-
-async function getWallpaper(id: string) {
-  try {
-    const res = await fetch(
-      `${SUPA}/rest/v1/wallpapers?id=eq.${encodeURIComponent(id)}&select=id,title,image_url&limit=1`,
-      { headers: { apikey: KEY }, next: { revalidate: 300 } }
-    );
-    if (!res.ok) return null;
-    const rows = await res.json();
-    return rows?.[0] ?? null;
-  } catch {
-    return null;
-  }
-}
+import { getWallpaperForShare } from "@/lib/db-server";
 
 export async function generateMetadata({
   params,
@@ -25,7 +9,7 @@ export async function generateMetadata({
   params: Promise<{ id: string }>;
 }): Promise<Metadata> {
   const { id } = await params;
-  const w = await getWallpaper(id);
+  const w = await getWallpaperForShare(id);
   if (!w) return { title: "Wallpaper not found | Fusion Wallpapers" };
 
   const title = `${w.title} Wallpaper | Fusion Wallpapers`;
@@ -53,6 +37,6 @@ export default async function WallpaperSharePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const w = await getWallpaper(id);
+  const w = await getWallpaperForShare(id);
   return <OpenInApp id={id} title={w?.title} />;
 }
