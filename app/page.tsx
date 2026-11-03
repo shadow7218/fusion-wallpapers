@@ -244,6 +244,15 @@ export default function FusionWallpapersApp() {
   const [isExpanded, setIsExpanded] = useState<boolean>(false);
   const [detailSrc, setDetailSrc] = useState<{ id: string; src: string } | null>(null);
   const [relatedVisibleCount, setRelatedVisibleCount] = useState<number>(6);
+  const [detailClosing, setDetailClosing] = useState<boolean>(false);
+
+  const pillRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const [pillBox, setPillBox] = useState<{ left: number; width: number } | null>(null);
+
+  useEffect(() => {
+    const el = pillRefs.current[selectedPillCategory];
+    if (el) setPillBox({ left: el.offsetLeft, width: el.offsetWidth });
+  }, [selectedPillCategory, activeTab, searchQuery]);
 
   const [activeMenu, setActiveMenu] = useState<{
     wallpaper: Wallpaper;
@@ -517,7 +526,7 @@ export default function FusionWallpapersApp() {
 
   useEffect(() => {
     const handlePopState = () => {
-      if (selectedWallpaper) setSelectedWallpaper(null);
+      if (selectedWallpaper) closeWallpaperDetail();
     };
     window.addEventListener("popstate", handlePopState);
     return () => window.removeEventListener("popstate", handlePopState);
@@ -537,6 +546,7 @@ export default function FusionWallpapersApp() {
   }, [selectedWallpaper]);
 
   const openWallpaperDetail = (wallpaper: Wallpaper, slides?: Wallpaper[]) => {
+    setDetailClosing(false);
     setActiveMenu(null);
     if (!selectedWallpaper) window.history.pushState({ wallpaperId: wallpaper.id }, "");
     setSelectedWallpaper(wallpaper);
@@ -548,10 +558,14 @@ export default function FusionWallpapersApp() {
   };
 
   const closeWallpaperDetail = () => {
-    setSelectedWallpaper(null);
-    setDetailSlides(null);
-    setDownloadStatus(null);
-    setIsExpanded(false);
+    setDetailClosing(true);
+    setTimeout(() => {
+      setSelectedWallpaper(null);
+      setDetailSlides(null);
+      setDownloadStatus(null);
+      setIsExpanded(false);
+      setDetailClosing(false);
+    }, 180);
   };
 
   const deepLinkHandled = useRef(false);
@@ -1020,8 +1034,6 @@ export default function FusionWallpapersApp() {
       im.src = url;
     });
 
-  // Cloudinary's free plan accepts images up to ~10 MB, so big files are
-  // re-saved as high-quality JPEG (same resolution) until they fit.
   const fitUnder = async (file: File, maxBytes: number): Promise<Blob> => {
     if (file.size <= maxBytes) return file;
     const bmp = await createImageBitmap(file);
@@ -1099,7 +1111,6 @@ export default function FusionWallpapersApp() {
           prev.map((p) => (p.id === pendingId ? { ...p, title: label(i + 1) } : p))
         );
 
-        // 1) image goes straight to Cloudinary
         const toUpload = await fitUnder(file, 9.5 * 1024 * 1024);
         const fd = new FormData();
         fd.append("file", toUpload, file.name);
@@ -1111,9 +1122,8 @@ export default function FusionWallpapersApp() {
         const up = await upRes.json();
         if (!upRes.ok) throw new Error(up?.error?.message || "Cloudinary upload failed");
         const publicUrl: string = up.secure_url;
-        const fileName: string = up.public_id; // saved in the storage_path column
+        const fileName: string = up.public_id;
 
-        // 2) only text data goes to the database
         let isFirst = false;
         if (category !== "none" && i === 0) {
           const { data: existing } = await supabase
@@ -1536,7 +1546,7 @@ export default function FusionWallpapersApp() {
       "hidden md:flex absolute top-1/2 z-20 h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white opacity-0 backdrop-blur-sm transition-opacity group-hover:opacity-100";
 
     return (
-      <div key={item.id} className="group break-inside-avoid mb-2 relative flex flex-col">
+      <div key={item.id} className="fusion-card group break-inside-avoid mb-2 relative flex flex-col">
         <div
           onClick={() => {
             if (Date.now() - justSwiped.current < 350) return;
@@ -1715,7 +1725,7 @@ export default function FusionWallpapersApp() {
     return (
       <div className="flex items-start gap-1 -mx-2 md:gap-2 md:mx-0">
         {cols.map((col, ci) => (
-          <div key={ci} className="flex-1 min-w-0 flex flex-col">
+          <div key={ci} className="fusion-col flex-1 min-w-0 flex flex-col">
             {col.map((e) =>
               e.kind === "pending"
                 ? renderPendingCard(e.p)
@@ -2004,23 +2014,38 @@ export default function FusionWallpapersApp() {
           </GlassContainer>
 
           {activeTab === "home" && !searchQuery && (
-            <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 pb-1">
+            <div className="relative flex items-center gap-2 overflow-x-auto no-scrollbar pt-0.5 pb-1">
+              {pillBox && (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute top-0.5 h-8 rounded-full transition-[transform,width] duration-[380ms] ease-[cubic-bezier(0.34,1.3,0.64,1)]"
+                  style={{
+                    left: 0,
+                    width: pillBox.width,
+                    transform: `translateX(${pillBox.left}px)`,
+                    background: isLight ? "#0E2F76" : "#ffffff",
+                  }}
+                />
+              )}
               {["All", "Phone", "PC", ...animeCategories.filter((c) => c.showOnHome !== false).map((c) => c.name)].map(
                 (pillName) => {
                   const isActive = selectedPillCategory === pillName;
                   return (
                     <button
                       key={pillName}
+                      ref={(el) => {
+                        pillRefs.current[pillName] = el;
+                      }}
                       type="button"
                       onClick={() => {
                         setSelectedPillCategory(pillName);
                         window.scrollTo({ top: 0, behavior: "smooth" });
                       }}
-                      className={`shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,background-color,color] duration-150 ease-out active:scale-[0.97] ${
+                      className={`relative z-10 shrink-0 rounded-full border px-4 h-8 text-[11px] font-semibold transition-[transform,color] duration-200 ease-out active:scale-[0.96] ${
                         isActive
-                          ? isLight
-                            ? "bg-[#0E2F76] text-white border-transparent"
-                            : "bg-white text-black border-transparent"
+                          ? (pillBox
+                              ? isLight ? "text-white" : "text-black"
+                              : isLight ? "bg-[#0E2F76] text-white" : "bg-white text-black") + " border-transparent"
                           : isLight
                           ? "bg-[#0E2F76]/10 text-[#0E2F76] border-[#0E2F76]/15"
                           : "bg-white/[0.07] text-white/85 border-white/10"
@@ -2047,7 +2072,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= CONTENT AREA ================= */}
       {activeTab === "profile" ? (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-8 z-10">
+        <main key={activeTab} className="fusion-page flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-8 z-10">
           {user ? (
             <div className="space-y-6">
               <div className="max-w-md md:max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-3 items-stretch">
@@ -2223,7 +2248,7 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : activeTab === "explore" && !searchQuery ? (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 z-10 pb-8">
+        <main key={activeTab} className="fusion-page flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 z-10 pb-8">
           {exploreView === "grid" ? (
             <div className="space-y-4 pt-2">
               <div className="flex items-center gap-2">
@@ -2309,7 +2334,7 @@ export default function FusionWallpapersApp() {
           )}
         </main>
       ) : (
-        <main className="flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 z-10 pb-6 flex flex-col justify-between">
+        <main key={activeTab} className="fusion-page flex-1 max-w-6xl w-full mx-auto px-3 md:px-4 z-10 pb-6 flex flex-col justify-between">
           <div>
             {/* ================= PC ONLY SECTION: HERO BANNER & TOP 10 TODAY ================= */}
             {activeTab === "home" &&
@@ -2652,9 +2677,9 @@ export default function FusionWallpapersApp() {
           role="dialog"
           aria-modal="true"
           aria-label={selectedWallpaper.title}
-          className={`fixed inset-0 z-50 overflow-y-auto animate-in fade-in duration-150 ${
-            isLight ? "bg-[#F4FEFF]" : "bg-[#000000]"
-          }`}
+          className={`fixed inset-0 z-50 overflow-y-auto ${
+            detailClosing ? "fusion-sheet-out" : "fusion-sheet-in"
+          } ${isLight ? "bg-[#F4FEFF]" : "bg-[#000000]"}`}
         >
           <div className="relative z-10 max-w-6xl mx-auto px-4 pt-3 pb-12 flex flex-col items-center">
             <div className="w-full max-w-3xl flex items-center justify-between mb-2.5">
@@ -2819,11 +2844,10 @@ export default function FusionWallpapersApp() {
                 className="flex-1 h-12 text-xs font-bold"
               >
                 <Bookmark
+                  key={String(savedIds.includes(selectedWallpaper.id))}
                   className={`h-4 w-4 ${
                     savedIds.includes(selectedWallpaper.id)
-                      ? isLight
-                        ? "fill-white text-white"
-                        : "fill-black text-black"
+                      ? (isLight ? "fill-white text-white" : "fill-black text-black") + " fusion-pop"
                       : ""
                   }`}
                 />
@@ -2861,7 +2885,7 @@ export default function FusionWallpapersApp() {
               <GlassContainer
                 type="rounded"
                 borderRadius={16}
-                className="mb-4 w-full max-w-md p-3 text-xs flex items-center justify-between"
+                className="fusion-rise mb-4 w-full max-w-md p-3 text-xs flex items-center justify-between"
               >
                 <div className="flex items-center gap-2">
                   {downloadStatus.type === "success" ? (
