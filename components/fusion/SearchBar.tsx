@@ -21,12 +21,18 @@ export default function SearchBar({
   const [isMobileOpen, setIsMobileOpen] = useState(false);
 
   useEffect(() => {
+    let lastY = window.scrollY;
+    
     const handleScroll = () => {
-      const scrolled = window.scrollY > 65;
-      setIsScrolled(scrolled);
-      if (!scrolled && isMobileOpen) {
+      const currentY = window.scrollY;
+      // Show the floating button only after the top area scrolls away
+      setIsScrolled(currentY > 85);
+      
+      // Close the expanded search if the user scrolls down/up by more than 15px
+      if (isMobileOpen && Math.abs(currentY - lastY) > 15) {
         setIsMobileOpen(false);
       }
+      lastY = currentY;
     };
 
     window.addEventListener("scroll", handleScroll, { passive: true });
@@ -34,19 +40,23 @@ export default function SearchBar({
   }, [isMobileOpen]);
 
   const handleToggle = () => {
-    const nextState = !isMobileOpen;
-    setIsMobileOpen(nextState);
-    if (nextState) {
-      setTimeout(() => {
-        searchInputRef.current?.focus();
-      }, 100);
-    }
+    setIsMobileOpen((prev) => {
+      const next = !prev;
+      if (next) {
+        // Focus the floating search input when opened
+        setTimeout(() => {
+          document.getElementById("floating-search-input")?.focus();
+        }, 100);
+      }
+      return next;
+    });
   };
 
   return (
     <>
-      {/* ================= DESKTOP & INLINE TOP SEARCHBAR ================= */}
-      <div className={`w-full transition-all duration-300 ${isScrolled ? "hidden md:block" : "block"}`}>
+      {/* ================= INLINE SEARCHBAR ================= */}
+      {/* We DO NOT hide this! It scrolls up and disappears naturally with the page, avoiding layout glitches */}
+      <div className="w-full">
         <GlassContainer
           type="pill"
           tintOpacity={0.12}
@@ -91,7 +101,7 @@ export default function SearchBar({
 
       {/* ================= MOBILE FLOATING LIQUID GLASS SEARCH TOGGLE ================= */}
       {isScrolled && (
-        <div className="md:hidden fixed top-3.5 right-3.5 z-40">
+        <div className="md:hidden fixed top-3.5 right-3.5 z-[60]">
           {!isMobileOpen ? (
             <div className="search-toggle-enter">
               <GlassButton
@@ -125,7 +135,7 @@ export default function SearchBar({
                     }`}
                   />
                   <input
-                    ref={searchInputRef}
+                    id="floating-search-input"
                     type="text"
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
