@@ -131,3 +131,40 @@ body {
 .theme-light .fusion-btn::before,
 .theme-light .s-circle::before,
 .theme-light .s-btn-ghost::before { display: none; }
+
+/* ===== Fusion motion system ===== */
+:root {
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-elastic: cubic-bezier(0.34, 1.32, 0.64, 1);
+}
+
+@keyframes fusion-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+@keyframes fusion-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fusion-sheet-in { from { opacity: 0; transform: translateY(18px) scale(0.985); } to { opacity: 1; transform: none; } }
+@keyframes fusion-sheet-out { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(12px) scale(0.99); } }
+@keyframes fusion-pop { 0% { transform: scale(0.6); } 60% { transform: scale(1.18); } 100% { transform: scale(1); } }
+@keyframes fusion-stretch { 0% { transform: scale(1, 1); } 35% { transform: scale(1.22, 0.92); } 100% { transform: scale(1, 1); } }
+@keyframes fusion-icon-settle { 0% { transform: scale(0.82); } 55% { transform: scale(1.22); } 100% { transform: scale(1.1); } }
+
+.fusion-page { animation: fusion-rise 260ms var(--ease-soft) both; }
+.fusion-rise { animation: fusion-rise 220ms var(--ease-soft) both; }
+.fusion-fade { animation: fusion-fade 200ms ease-out both; }
+.fusion-sheet-in { animation: fusion-sheet-in 240ms var(--ease-soft) both; }
+.fusion-sheet-out { animation: fusion-sheet-out 170ms ease-in both; pointer-events: none; }
+.fusion-pop { animation: fusion-pop 320ms var(--ease-elastic) both; }
+.fusion-stretch { animation: fusion-stretch 420ms var(--ease-soft) both; }
+.fusion-icon-settle { animation: fusion-icon-settle 380ms var(--ease-elastic) both; }
+
+/* Wallpaper cards: only the first 4 per column fade in, staggered.
+   Everything below is off-screen anyway, so it simply appears (keeps scrolling light). */
+.fusion-card { animation: fusion-rise 260ms var(--ease-soft) both; }
+.fusion-col > .fusion-card:nth-child(1) { animation-delay: 0ms; }
+.fusion-col > .fusion-card:nth-child(2) { animation-delay: 50ms; }
+.fusion-col > .fusion-card:nth-child(3) { animation-delay: 100ms; }
+.fusion-col > .fusion-card:nth-child(4) { animation-delay: 150ms; }
+.fusion-col > .fusion-card:nth-child(n + 5) { animation: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .fusion-page, .fusion-rise, .fusion-fade, .fusion-sheet-in, .fusion-sheet-out,
+  .fusion-pop, .fusion-stretch, .fusion-icon-settle, .fusion-card { animation: none !important; }
+}
