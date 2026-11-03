@@ -2915,10 +2915,10 @@ export default function FusionWallpapersApp() {
                   aria-label={isExpanded ? "Show less" : "View full wallpaper"}
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className="fusion-bounce absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/25 bg-black/35 text-white shadow-lg backdrop-blur-xl transition-all duration-200 hover:bg-white/20 hover:border-white/40 active:scale-90"
+                  className="fusion-bounce absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center rounded-full border border-white/40 bg-white/15 text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.45),0_2px_12px_rgba(0,0,0,0.12)] backdrop-blur-2xl transition-all duration-200 hover:bg-white/25 active:scale-90"
                   style={{
-                  WebkitBackdropFilter: "blur(18px)",
-                  backdropFilter: "blur(18px)",
+                  WebkitBackdropFilter: "blur(24px) saturate(180%)",
+                  backdropFilter: "blur(24px) saturate(180%)",
             }}
            >
                  {isExpanded ? (
