@@ -2,17 +2,15 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import type { User } from "@supabase/supabase-js";
 import type { LucideIcon } from "lucide-react";
 import {
   ArrowLeft, Moon, Sun, Pencil, User as UserIcon, Lock, Bell, ShieldCheck,
   Link2, Globe, Waves, LogOut, Trash2, AlertTriangle, ChevronRight,
   Loader2, Palette, Settings as SettingsIcon,
 } from "lucide-react";
-import { createClient } from "@/utils/supabase/client";
+import { db, type AppUser } from "@/lib/db";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
 
-const supabase = createClient();
 const AVATAR_IDS = ["ember", "moon", "bolt", "blade", "ghost", "crown", "skull", "star", "heart", "rocket"];
 
 const applyTheme = (t: "dark" | "light") => {
@@ -68,7 +66,7 @@ function Title({ icon: Icon, children, danger }: { icon: LucideIcon; children: R
 
 export default function SettingsPage() {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [ready, setReady] = useState(false);
   const [displayName, setDisplayName] = useState("");
   const [theme, setTheme] = useState<"dark" | "light">("dark");
@@ -93,20 +91,16 @@ export default function SettingsPage() {
     setHaptics(localStorage.getItem("fusion-haptics") !== "off");
 
     (async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      const u = session?.user ?? null;
+      const u = await db.getCurrentUser();
       if (!u) { router.replace("/"); return; }
       setUser(u);
-      setEmailNotifs(u.user_metadata?.email_notifications !== false);
+      setEmailNotifs(u.emailNotifications);
 
-      const [{ data: prof }, { count }] = await Promise.all([
-        supabase.from("profiles").select("display_name").eq("id", u.id).maybeSingle(),
-        supabase.from("saved_wallpapers").select("wallpaper_id", { count: "exact", head: true }).eq("user_id", u.id),
-      ]);
+      const [prof, count] = await Promise.all([db.getProfile(u.id), db.countSaved(u.id)]);
       const name = prof?.display_name || u.email?.split("@")[0] || "Shadow";
       setDisplayName(name);
       setNameInput(name);
-      setSavedCount(count ?? 0);
+      setSavedCount(count);
       setReady(true);
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -117,9 +111,12 @@ export default function SettingsPage() {
   const chooseAvatar = async (id: string) => {
     if (!user) return;
     buzz();
-    setUser({ ...user, user_metadata: { ...user.user_metadata, avatar_id: id } } as User);
-    const { error } = await supabase.auth.updateUser({ data: { avatar_id: id } });
-    if (error) flash(false, error.message);
+    setUser({ ...user, avatarId: id });
+    try {
+      await db.setUserAvatar(id);
+    } catch (err: any) {
+      flash(false, err.message);
+    }
   };
 
   const toggleTheme = (dark: boolean) => {
@@ -139,7 +136,7 @@ export default function SettingsPage() {
   const toggleEmailNotifs = async (v: boolean) => {
     setEmailNotifs(v);
     buzz();
-    await supabase.auth.updateUser({ data: { email_notifications: v } });
+    await db.setEmailNotifications(v).catch(() => {});
   };
 
   const saveName = async () => {
@@ -147,11 +144,13 @@ export default function SettingsPage() {
     const n = nameInput.trim();
     if (!n) return flash(false, "Name can't be empty.");
     setBusy(true);
-    const { error } = await supabase.from("profiles").upsert({
-      id: user.id, display_name: n, updated_at: new Date().toISOString(),
-    });
+    try {
+      await db.saveProfileName(user.id, n);
+    } catch (err: any) {
+      setBusy(false);
+      return flash(false, err.message);
+    }
     setBusy(false);
-    if (error) return flash(false, error.message);
     setDisplayName(n);
     setOpen(null);
     flash(true, "Name updated.");
@@ -161,9 +160,13 @@ export default function SettingsPage() {
     if (busy) return;
     if (passInput.length < 6) return flash(false, "Password must be at least 6 characters.");
     setBusy(true);
-    const { error } = await supabase.auth.updateUser({ password: passInput });
+    try {
+      await db.updatePassword(passInput);
+    } catch (err: any) {
+      setBusy(false);
+      return flash(false, err.message);
+    }
     setBusy(false);
-    if (error) return flash(false, error.message);
     setPassInput("");
     setOpen(null);
     flash(true, "Password updated.");
@@ -171,27 +174,28 @@ export default function SettingsPage() {
 
   // Linking needs "Allow manual linking" enabled in the Supabase dashboard.
   const linkProvider = async (provider: "google") => {
-    const { error } = await supabase.auth.linkIdentity({
-      provider,
-      options: { redirectTo: `${window.location.origin}/settings` },
-    });
-    if (error) flash(false, error.message);
+    try {
+      await db.linkProvider(provider, `${window.location.origin}/settings`);
+    } catch (err: any) {
+      flash(false, err.message);
+    }
   };
 
   const signOut = async () => {
-    await supabase.auth.signOut();
+    await db.signOut();
     router.replace("/");
   };
 
   const deleteAccount = async () => {
     if (busy) return;
     setBusy(true);
-    const { error } = await supabase.rpc("delete_my_account");
-    if (error) {
+    try {
+      await db.deleteMyAccount();
+    } catch (err: any) {
       setBusy(false);
-      return flash(false, error.message);
+      return flash(false, err.message);
     }
-    await supabase.auth.signOut();
+    await db.signOut();
     router.replace("/");
   };
 
@@ -204,9 +208,9 @@ export default function SettingsPage() {
     );
   }
 
-  const providers = Array.from(new Set((user.identities || []).map((i) => i.provider)));
+  const providers = user.providers;
   const pretty = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
-  const avatarId = user.user_metadata?.avatar_id as string | undefined;
+  const avatarId = user.avatarId ?? undefined;
 
   return (
     <div className="s-root min-h-screen">
