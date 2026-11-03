@@ -2,8 +2,7 @@
 
 import React, { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { createClient } from "@/utils/supabase/client";
-import { User } from "@supabase/supabase-js";
+import { db, type Wallpaper, type AppUser } from "@/lib/db";
 import {
   Download,
   Upload,
@@ -60,18 +59,6 @@ import {
   GlassButton,
   LiquidGlassShaderDefs,
 } from "@/components/liquid-glass/LiquidGlass";
-
-interface Wallpaper {
-  id: string;
-  title: string;
-  image_url: string;
-  storage_path: string;
-  category?: string | null;
-  is_banner?: boolean;
-  tags?: string[] | null;
-  downloads: number;
-  created_at: string;
-}
 
 interface UserProfile {
   id: string;
@@ -199,7 +186,6 @@ function buildUpdatedTags(
 
 export default function FusionWallpapersApp() {
   const router = useRouter();
-  const supabase = useMemo(() => createClient(), []);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const detailScrollRef = useRef<HTMLDivElement>(null);
   const top10ScrollRef = useRef<HTMLDivElement>(null);
@@ -222,7 +208,7 @@ export default function FusionWallpapersApp() {
   const sessionSeed = useRef<number>(Math.random());
   const frozenRatios = useRef<Record<string, number>>({});
 
-  const [user, setUser] = useState<User | null>(null);
+  const [user, setUser] = useState<AppUser | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [savingInProgressIds, setSavingInProgressIds] = useState<string[]>([]);
@@ -418,10 +404,7 @@ export default function FusionWallpapersApp() {
   useEffect(() => {
     const init = async () => {
       await fetchWallpapers();
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      const currentUser = session?.user ?? null;
+      const currentUser = await db.getCurrentUser();
       setUser(currentUser);
       if (currentUser) {
         await Promise.all([
@@ -432,13 +415,9 @@ export default function FusionWallpapersApp() {
     };
     init();
 
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === "INITIAL_SESSION") return;
-      const currentUser = session?.user ?? null;
+    const unsubscribe = db.onAuthChange(async ({ type, user: currentUser }) => {
       setUser(currentUser);
-      if (event === "PASSWORD_RECOVERY") {
+      if (type === "PASSWORD_RECOVERY") {
         setAuthStep("UPDATE_PASSWORD");
         setAuthError(null);
         setAuthSuccessMsg(
@@ -458,8 +437,8 @@ export default function FusionWallpapersApp() {
       }
     });
 
-    return () => subscription.unsubscribe();
-  }, [supabase]);
+    return () => unsubscribe();
+  }, []);
 
   const pcHeroWallpapers = useMemo(() => {
     if (wallpapers.length === 0) return [];
@@ -603,8 +582,7 @@ export default function FusionWallpapersApp() {
     (async () => {
       let w = wallpapers.find((x) => String(x.id) === id) ?? null;
       if (!w) {
-        const { data } = await supabase.from("wallpapers").select("*").eq("id", id).maybeSingle();
-        w = (data as Wallpaper) ?? null;
+        w = await db.getWallpaper(id);
       }
       if (w) openWallpaperDetail(w);
     })();
@@ -615,12 +593,7 @@ export default function FusionWallpapersApp() {
     if (!silent) setLoading(true);
     setFetchError(null);
     try {
-      const { data, error } = await supabase
-        .from("wallpapers")
-        .select("*")
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      setWallpapers(data || []);
+      setWallpapers(await db.listWallpapers());
     } catch (err: any) {
       setFetchError(err.message || "Could not load wallpapers.");
     } finally {
@@ -628,14 +601,10 @@ export default function FusionWallpapersApp() {
     }
   };
 
-  const fetchUserProfile = async (currentUser: User) => {
+  const fetchUserProfile = async (currentUser: AppUser) => {
     const fallbackName = currentUser.email?.split("@")[0] || "Shadow";
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("id, display_name")
-      .eq("id", currentUser.id)
-      .maybeSingle();
-    if (!error && data) {
+    const data = await db.getProfile(currentUser.id);
+    if (data) {
       setProfile({
         id: data.id,
         display_name: data.display_name || fallbackName,
@@ -648,12 +617,8 @@ export default function FusionWallpapersApp() {
   };
 
   const fetchSavedWallpapers = async (userId: string) => {
-    const { data, error } = await supabase
-      .from("saved_wallpapers")
-      .select("wallpaper_id")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false });
-    if (!error && data) setSavedIds(data.map((row) => row.wallpaper_id));
+    const ids = await db.listSavedIds(userId);
+    if (ids) setSavedIds(ids);
   };
 
   const requireAuthForAction = (
@@ -669,7 +634,7 @@ export default function FusionWallpapersApp() {
     setIsAuthModalOpen(true);
   };
 
-  const executePendingIntentAfterAuth = async (authenticatedUser: User) => {
+  const executePendingIntentAfterAuth = async (authenticatedUser: AppUser) => {
     if (!pendingIntent) return;
     const intent = pendingIntent;
     setPendingIntent(null);
@@ -700,14 +665,10 @@ export default function FusionWallpapersApp() {
 
     setAuthLoading(true);
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: cleanEmail,
-        password: authPassword,
-      });
-      if (error) throw error;
+      const signedInUser = await db.signInWithPassword(cleanEmail, authPassword);
       setIsAuthModalOpen(false);
       setAuthPassword("");
-      if (data.user) await executePendingIntentAfterAuth(data.user);
+      if (signedInUser) await executePendingIntentAfterAuth(signedInUser);
     } catch (err: any) {
       setAuthError(formatSupabaseAuthError(err));
     } finally {
@@ -730,21 +691,15 @@ export default function FusionWallpapersApp() {
 
     setAuthLoading(true);
     try {
-      const { data, error } = await supabase.auth.signUp({
-        email: cleanEmail,
-        password: authPassword,
-      });
-      if (error) throw error;
-      if (data.session && data.user) {
+      const { user: newUser, signedIn } = await db.signUpWithPassword(cleanEmail, authPassword);
+      if (signedIn && newUser) {
         const defaultName = cleanEmail.split("@")[0] || "Shadow";
-        await supabase
-          .from("profiles")
-          .upsert({ id: data.user.id, display_name: defaultName });
-        await fetchUserProfile(data.user);
+        await db.saveProfileName(newUser.id, defaultName).catch(() => {});
+        await fetchUserProfile(newUser);
         setIsAuthModalOpen(false);
         setAuthPassword("");
         setAuthConfirmPassword("");
-        await executePendingIntentAfterAuth(data.user);
+        await executePendingIntentAfterAuth(newUser);
         return;
       }
       setAuthPassword("");
@@ -773,10 +728,7 @@ export default function FusionWallpapersApp() {
     try {
       const redirectUrl =
         typeof window !== "undefined" ? window.location.origin : undefined;
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
-        redirectTo: redirectUrl,
-      });
-      if (error) throw error;
+      await db.sendPasswordReset(cleanEmail, redirectUrl);
       setResendCooldown(60);
       setAuthStep("RESET_LINK_SENT");
       setAuthSuccessMsg(
@@ -800,15 +752,12 @@ export default function FusionWallpapersApp() {
 
     setAuthLoading(true);
     try {
-      const { data, error } = await supabase.auth.updateUser({
-        password: authPassword,
-      });
-      if (error) throw error;
+      const updatedUser = await db.updatePassword(authPassword);
       setIsAuthModalOpen(false);
       setAuthPassword("");
       setAuthConfirmPassword("");
       setAuthStep("SIGN_IN");
-      if (data.user) await executePendingIntentAfterAuth(data.user);
+      if (updatedUser) await executePendingIntentAfterAuth(updatedUser);
     } catch (err: any) {
       setAuthError(formatSupabaseAuthError(err));
     } finally {
@@ -818,22 +767,22 @@ export default function FusionWallpapersApp() {
 
   const handleOAuthSignIn = async (provider: "google" | "apple") => {
     setAuthError(null);
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: `${window.location.origin}/` },
-    });
-    if (error) setAuthError(error.message);
+    try {
+      await db.signInWithProvider(provider, `${window.location.origin}/`);
+    } catch (err: any) {
+      setAuthError(err.message);
+    }
   };
 
   const handleSignOut = async () => {
-    await supabase.auth.signOut();
+    await db.signOut();
     setIsSettingsModalOpen(false);
   };
 
   const toggleSaveWallpaper = async (
     e: React.MouseEvent | null,
     wallpaper: Wallpaper,
-    overrideUser?: User | null
+    overrideUser?: AppUser | null
   ) => {
     if (e) e.stopPropagation();
     const activeUser = overrideUser !== undefined ? overrideUser : user;
@@ -856,20 +805,9 @@ export default function FusionWallpapersApp() {
 
     try {
       if (currentlySaved) {
-        const { error } = await supabase
-          .from("saved_wallpapers")
-          .delete()
-          .eq("user_id", activeUser.id)
-          .eq("wallpaper_id", wallpaper.id);
-        if (error) throw error;
+        await db.unsaveWallpaper(activeUser.id, wallpaper.id);
       } else {
-        const { error } = await supabase
-          .from("saved_wallpapers")
-          .upsert(
-            { user_id: activeUser.id, wallpaper_id: wallpaper.id },
-            { onConflict: "user_id,wallpaper_id" }
-          );
-        if (error) throw error;
+        await db.saveWallpaper(activeUser.id, wallpaper.id);
       }
     } catch (err) {
       setSavedIds((prev) =>
@@ -886,7 +824,7 @@ export default function FusionWallpapersApp() {
 
   const triggerDirectDownload = async (
     wallpaper: Wallpaper,
-    overrideUser?: User | null
+    overrideUser?: AppUser | null
   ) => {
     const activeUser = overrideUser !== undefined ? overrideUser : user;
     if (!activeUser) {
@@ -903,10 +841,7 @@ export default function FusionWallpapersApp() {
     try {
       let fileBlob: Blob | null = null;
       if (wallpaper.storage_path && !wallpaper.image_url.includes("res.cloudinary.com")) {
-        const { data, error } = await supabase.storage
-          .from("wallpapers")
-          .download(wallpaper.storage_path);
-        if (!error && data) fileBlob = data;
+        fileBlob = await db.downloadStoredFile(wallpaper.storage_path);
       }
       if (!fileBlob) {
         const response = await fetch(wallpaper.image_url, { mode: "cors" });
@@ -993,12 +928,7 @@ export default function FusionWallpapersApp() {
     try {
       const trimmedName = editDisplayName.trim();
       if (!trimmedName) throw new Error("Display name cannot be empty.");
-      const { error: profileError } = await supabase.from("profiles").upsert({
-        id: user.id,
-        display_name: trimmedName,
-        updated_at: new Date().toISOString(),
-      });
-      if (profileError) throw profileError;
+      await db.saveProfileName(user.id, trimmedName);
 
       setProfile({ id: user.id, display_name: trimmedName });
 
@@ -1007,10 +937,7 @@ export default function FusionWallpapersApp() {
           throw new Error("New password must be at least 6 characters.");
         if (newPasswordInput !== confirmNewPasswordInput)
           throw new Error("New passwords do not match.");
-        const { error: pwError } = await supabase.auth.updateUser({
-          password: newPasswordInput,
-        });
-        if (pwError) throw pwError;
+        await db.updatePassword(newPasswordInput);
         setNewPasswordInput("");
         setConfirmNewPasswordInput("");
       }
@@ -1151,12 +1078,7 @@ export default function FusionWallpapersApp() {
 
         let isFirst = false;
         if (category !== "none" && i === 0) {
-          const { data: existing } = await supabase
-            .from("wallpapers")
-            .select("id")
-            .eq("category", category)
-            .limit(1);
-          isFirst = !existing || existing.length === 0;
+          isFirst = !(await db.categoryHasWallpapers(category));
         }
 
         const ratio = i === 0 ? coverRatio : await measureRatio(url);
@@ -1171,24 +1093,9 @@ export default function FusionWallpapersApp() {
           storage_path: fileName,
           category: category === "none" ? null : category,
         };
-        const { data: inserted, error: dbError } = await supabase
-          .from("wallpapers")
-          .insert([{ ...row, is_banner: isFirst, tags }])
-          .select()
-          .maybeSingle();
-
-        if (dbError) {
-          const { data: fb, error: fbError } = await supabase
-            .from("wallpapers")
-            .insert([row])
-            .select()
-            .maybeSingle();
-          if (fbError) throw fbError;
-          if (fb?.id)
-            saveLocalCurationOverride(fb.id, i === 0 ? showHero : false, parsedRank);
-        } else if (inserted?.id) {
-          saveLocalCurationOverride(inserted.id, i === 0 ? showHero : false, parsedRank);
-        }
+        const created = await db.createWallpaper({ ...row, is_banner: isFirst, tags });
+        if (created?.id)
+          saveLocalCurationOverride(created.id, i === 0 ? showHero : false, parsedRank);
       }
 
       setPendingUploads((prev) => prev.filter((p) => p.id !== pendingId));
@@ -1212,12 +1119,7 @@ export default function FusionWallpapersApp() {
     if (!window.confirm(`Delete "${wallpaper.title}" permanently?`)) return;
 
     try {
-      if (!wallpaper.image_url.includes("res.cloudinary.com")) {
-        await supabase.storage
-          .from("wallpapers")
-          .remove([wallpaper.storage_path]);
-      }
-      await supabase.from("wallpapers").delete().eq("id", wallpaper.id);
+      await db.deleteWallpaper(wallpaper);
       setWallpapers((prev) => prev.filter((w) => w.id !== wallpaper.id));
       if (selectedWallpaper?.id === wallpaper.id) closeWallpaperDetail();
     } catch (err: any) {
@@ -1234,10 +1136,7 @@ export default function FusionWallpapersApp() {
       const finalCat =
         editCategorySelection === "none" ? null : editCategorySelection;
       if (editSetAsBanner && finalCat) {
-        await supabase
-          .from("wallpapers")
-          .update({ is_banner: false })
-          .eq("category", finalCat);
+        await db.clearBanner(finalCat);
       }
 
       const parsedRank =
@@ -1260,10 +1159,7 @@ export default function FusionWallpapersApp() {
             otherCuration.isHero,
             null
           );
-          await supabase
-            .from("wallpapers")
-            .update({ tags: cleanedTags })
-            .eq("id", other.id);
+          await db.updateWallpaperTags(other.id, cleanedTags);
         }
       }
 
@@ -1273,25 +1169,11 @@ export default function FusionWallpapersApp() {
         parsedRank
       );
 
-      const { error } = await supabase
-        .from("wallpapers")
-        .update({
-          category: finalCat,
-          is_banner: editSetAsBanner && finalCat !== null,
-          tags: updatedTags,
-        })
-        .eq("id", selectedWallpaper.id);
-
-      if (error) {
-        const { error: fallbackErr } = await supabase
-          .from("wallpapers")
-          .update({
-            category: finalCat,
-            is_banner: editSetAsBanner && finalCat !== null,
-          })
-          .eq("id", selectedWallpaper.id);
-        if (fallbackErr) throw fallbackErr;
-      }
+      await db.updateWallpaperDetails(selectedWallpaper.id, {
+        category: finalCat,
+        is_banner: editSetAsBanner && finalCat !== null,
+        tags: updatedTags,
+      });
 
       saveLocalCurationOverride(
         selectedWallpaper.id,
@@ -1339,11 +1221,7 @@ export default function FusionWallpapersApp() {
         });
         const up = await res.json();
         if (!res.ok) throw new Error(up?.error?.message || "upload failed");
-        const { error } = await supabase
-          .from("wallpapers")
-          .update({ image_url: up.secure_url, storage_path: up.public_id })
-          .eq("id", w.id);
-        if (error) throw error;
+        await db.updateWallpaperUrl(w.id, up.secure_url, up.public_id);
         ok++;
       } catch {
         failed.push(w.title);
@@ -1371,7 +1249,7 @@ export default function FusionWallpapersApp() {
           im.src = img(w.image_url, 80);
         });
         const tags = [...(Array.isArray(w.tags) ? w.tags : []), ratio >= 1 ? PC_TAG : PHONE_TAG];
-        await supabase.from("wallpapers").update({ tags }).eq("id", w.id);
+        await db.updateWallpaperTags(w.id, tags);
         done++;
       } catch {}
     }
@@ -2046,7 +1924,7 @@ export default function FusionWallpapersApp() {
                 onClick={() => setActiveTab("profile")}
                 className="px-3.5 h-9 text-xs font-semibold"
               >
-                <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name} size={20} />
+                <AvatarBadge id={user.avatarId} name={profile?.display_name} size={20} />
                 <span className="max-w-[85px] truncate">
                   {profile?.display_name || "Shadow"}
                 </span>
@@ -2196,7 +2074,7 @@ export default function FusionWallpapersApp() {
                   style={{
                     ...(() => {
                       const avatar = AVATARS.find(
-                        (item) => item.id === user.user_metadata?.avatar_id
+                        (item) => item.id === user.avatarId
                       );
 
                       const from = avatar?.from ?? "#2a2a32";
@@ -2213,7 +2091,7 @@ export default function FusionWallpapersApp() {
                 >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3 min-w-0">
-                      <AvatarBadge id={user.user_metadata?.avatar_id} name={profile?.display_name || user.email || "U"} size={44} />
+                      <AvatarBadge id={user.avatarId} name={profile?.display_name || user.email || "U"} size={44} />
 
                       <div className="min-w-0">
                         <div className="flex items-center gap-1.5">
@@ -2815,1075 +2693,4 @@ export default function FusionWallpapersApp() {
               <GlassButton
                 typeShape="circle"
                 size={40}
-                tintOpacity={0.14}
-                aria-label="Go back"
-                onClick={closeWallpaperDetail}
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </GlassButton>
-
-              <div className="text-center px-2">
-                <h1 className="text-base sm:text-lg font-bold tracking-wide">
-                  {selectedWallpaper.title}
-                </h1>
-                <p className="text-[11px] opacity-60 capitalize">
-                  {selectedWallpaper.category
-                    ? animeCategories.find(
-                        (c) => c.id === selectedWallpaper.category
-                      )?.name || selectedWallpaper.category
-                    : "Uncategorized"}
-                </p>
-              </div>
-
-              <GlassButton
-                typeShape="circle"
-                size={40}
-                tintOpacity={0.14}
-                aria-label="Share wallpaper"
-                onClick={(e) => handleShareWallpaper(e, selectedWallpaper)}
-              >
-                <Share2 className="h-4 w-4" />
-              </GlassButton>
-            </div>
-
-            {isAdmin && (
-              <div className="mb-2 w-full flex justify-end">
-                <GlassButton
-                  typeShape="pill"
-                  onClick={() => {
-                    const currentCuration = extractCurationFromWallpaper(
-                      selectedWallpaper,
-                      curationOverrides
-                    );
-                    setEditCategorySelection(
-                      selectedWallpaper.category || "none"
-                    );
-                    setEditSetAsBanner(!!selectedWallpaper.is_banner);
-                    setEditShowInHero(currentCuration.isHero);
-                    setEditTop10Rank(
-                      currentCuration.top10Rank
-                        ? String(currentCuration.top10Rank)
-                        : "none"
-                    );
-                    setIsEditModalOpen(true);
-                  }}
-                  className="h-8 px-3.5 text-[11px] font-bold"
-                >
-                  <Edit3 className="h-3 w-3" />
-                  <span>Edit Wallpaper</span>
-                </GlassButton>
-              </div>
-            )}
-
-            {/* WALLPAPER PREVIEW BOX */}
-            <div
-              key={selectedWallpaper.id}
-              onPointerDown={detailSlides ? onSwipeStart : undefined}
-              onPointerUp={detailSlides ? (e) => onSwipeEnd(e, stepDetail) : undefined}
-              style={{ touchAction: detailSlides ? "pan-y" : undefined }}
-              className={`relative inline-block rounded-3xl overflow-hidden bg-[#0a0a0a] border mx-auto w-fit max-w-full mb-3 fusion-photo-in ${
-                isLight
-                  ? "border-[#0E2F76]/25 shadow-[0_30px_60px_-15px_rgba(14,47,118,0.55),0_12px_24px_-8px_rgba(14,47,118,0.35),0_2px_6px_rgba(14,47,118,0.2)]"
-                  : "border-white/25 shadow-2xl"
-              } ${detailRatio === undefined ? "min-h-[50vh] min-w-[60vw]" : ""}`}
-            >
-              <img
-                src={
-                  detailSrc && detailSrc.id === selectedWallpaper.id
-                    ? detailSrc.src
-                    : img(selectedWallpaper, 500)
-                }
-                decoding="async"
-                alt={selectedWallpaper.title}
-                draggable={false}
-                onContextMenu={(e) => e.preventDefault()}
-                className={`block pointer-events-none select-none transition-all duration-300 ${
-                  detailIsTall && !isExpanded
-                    ? "w-auto max-w-full max-h-[62vh] aspect-[9/16] object-cover"
-                    : "w-auto max-w-full h-auto max-h-[75vh] object-contain"
-                } ${detailDir === 1 ? "fusion-in-right" : detailDir === -1 ? "fusion-in-left" : ""}`}
-              />
-
-              <div
-                className="absolute inset-0 z-10 bg-transparent"
-                onContextMenu={(e) => e.preventDefault()}
-              />
-
-              {detailIsTall && (
-                <button
-                  type="button"
-                  aria-label={isExpanded ? "Show less" : "View full wallpaper"}
-                  onPointerDown={(e) => e.stopPropagation()}
-                  onClick={() => setIsExpanded(!isExpanded)}
-                  className="fusion-bounce absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/35 bg-white/[0.035] text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-1px_2px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.12)] transition-transform duration-200 active:scale-90"
-
-                  style={{
-                  backdropFilter: "blur(2px) saturate(110%)",
-                  WebkitBackdropFilter: "blur(2px) saturate(110%)",
-            }}
-           >
-                 {isExpanded ? (
-                 <Minimize2 className="h-5 w-5" strokeWidth={2.2} />
-                  ) : (
-                <Maximize2 className="h-5 w-5" strokeWidth={2.2} />
-            )}
-               </button>
-            )}
-
-              {detailSlides && (
-                <>
-                  <span className="absolute right-3 top-3 z-20 rounded-full bg-black/50 px-2 py-0.5 text-[10px] font-semibold text-white">
-                    {detailSlides.findIndex((s) => s.id === selectedWallpaper.id) + 1} / {detailSlides.length}
-                  </span>
-                  <button
-                    type="button"
-                    aria-label="Previous wallpaper"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => stepDetail(-1)}
-                    className="hidden md:flex absolute left-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-                  >
-                    <ChevronLeft className="h-5 w-5" />
-                  </button>
-                  <button
-                    type="button"
-                    aria-label="Next wallpaper"
-                    onPointerDown={(e) => e.stopPropagation()}
-                    onClick={() => stepDetail(1)}
-                    className="hidden md:flex absolute right-2 top-1/2 z-20 h-10 w-10 -translate-y-1/2 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-sm"
-                  >
-                    <ChevronRight className="h-5 w-5" />
-                  </button>
-                </>
-              )}
-            </div>
-
-            {detailSlides && (
-              <div className="mb-3 -mt-1 flex items-center justify-center gap-1.5">
-                {detailSlides.map((s) => (
-                  <span
-                    key={s.id}
-                    className={`h-1.5 rounded-full transition-all duration-200 ${
-                      s.id === selectedWallpaper.id
-                        ? `w-4 ${isLight ? "bg-[#0E2F76]" : "bg-white"}`
-                        : `w-1.5 ${isLight ? "bg-[#0E2F76]/25" : "bg-white/35"}`
-                    }`}
-                  />
-                ))}
-              </div>
-            )}
-
-            {/* SIDE-BY-SIDE LIQUID GLASS SAVE & DOWNLOAD BUTTONS */}
-            <div className="flex items-center gap-3 w-full max-w-md mb-5">
-              <GlassButton
-                typeShape="pill"
-                tintOpacity={0.14}
-                activeWhite={savedIds.includes(selectedWallpaper.id)}
-                onClick={(e) => toggleSaveWallpaper(e, selectedWallpaper)}
-                disabled={savingInProgressIds.includes(selectedWallpaper.id)}
-                className="flex-1 h-12 text-xs font-bold"
-              >
-                <Bookmark
-                  key={String(savedIds.includes(selectedWallpaper.id))}
-                  className={`h-4 w-4 ${
-                    savedIds.includes(selectedWallpaper.id)
-                      ? (isLight ? "fill-white text-white" : "fill-black text-black") + " fusion-pop"
-                      : ""
-                  }`}
-                />
-                <span>
-                  {savedIds.includes(selectedWallpaper.id) ? "Saved" : "Save"}
-                </span>
-              </GlassButton>
-
-              <GlassButton
-                typeShape="pill"
-                activeWhite={true}
-                onClick={() =>
-                  detailSlides
-                    ? setDownloadChoice({ current: selectedWallpaper, slides: detailSlides })
-                    : triggerDirectDownload(selectedWallpaper)
-                }
-                disabled={downloadingId === selectedWallpaper.id}
-                className="flex-1 h-12 text-xs font-extrabold"
-              >
-                {downloadingId === selectedWallpaper.id ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Downloading...</span>
-                  </>
-                ) : (
-                  <>
-                    <Download className="h-4 w-4" />
-                    <span>Download</span>
-                  </>
-                )}
-              </GlassButton>
-            </div>
-
-            {downloadStatus && downloadStatus.id === selectedWallpaper.id && (
-              <GlassContainer
-                type="rounded"
-                borderRadius={16}
-                className="fusion-rise mb-4 w-full max-w-md p-3 text-xs flex items-center justify-between"
-              >
-                <div className="flex items-center gap-2">
-                  {downloadStatus.type === "success" ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                  ) : (
-                    <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
-                  )}
-                  <span>{downloadStatus.message}</span>
-                </div>
-                {downloadStatus.type === "error" && (
-                  <button
-                    type="button"
-                    onClick={() =>
-                      detailSlides
-                        ? setDownloadChoice({ current: selectedWallpaper, slides: detailSlides })
-                        : triggerDirectDownload(selectedWallpaper)
-                    }
-                    className="underline font-semibold ml-2"
-                  >
-                    Retry
-                  </button>
-                )}
-              </GlassContainer>
-            )}
-
-            {/* RELATED WALLPAPERS SECTION */}
-            <div className="w-full pt-3 border-t border-white/10">
-              <h3 className="text-sm font-bold tracking-wide mb-3">
-                Related wallpapers
-              </h3>
-              {relatedWallpapers.length === 0 ? (
-                <p className="text-xs opacity-50">
-                  More wallpapers coming soon.
-                </p>
-              ) : (
-                <>
-                  {renderMasonry(relatedWallpapers.slice(0, relatedVisibleCount))}
-                  {relatedVisibleCount < relatedWallpapers.length && (
-                    <div className="mt-4 text-center">
-                      <GlassButton
-                        typeShape="pill"
-                        onClick={() =>
-                          setRelatedVisibleCount((prev) => prev + Math.max(8, colCount * 2))
-                        }
-                        className="px-5 h-9 text-xs font-semibold"
-                      >
-                        Load More Related
-                      </GlassButton>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ================= DOWNLOAD CHOICE MODAL ================= */}
-      <Dialog open={!!downloadChoice} onOpenChange={(o) => !o && setDownloadChoice(null)}>
-        <DialogContent
-          style={{ background: "rgba(10, 10, 14, 0.92)" }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-sm p-5"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-center text-base font-black text-white">
-              Download
-            </DialogTitle>
-            <DialogDescription className="text-center text-xs text-white/60">
-              This post has {downloadChoice?.slides.length} wallpapers. What would you like to save?
-            </DialogDescription>
-          </DialogHeader>
-          <div className="mt-3 space-y-2">
-            <GlassButton
-              typeShape="pill"
-              activeWhite={true}
-              className="w-full h-11 text-xs font-bold"
-              onClick={() => {
-                const c = downloadChoice!.current;
-                setDownloadChoice(null);
-                triggerDirectDownload(c);
-              }}
-            >
-              Download this wallpaper
-            </GlassButton>
-            <GlassButton
-              typeShape="pill"
-              className="w-full h-11 text-xs font-bold"
-              onClick={async () => {
-                const all = downloadChoice!.slides;
-                setDownloadChoice(null);
-                for (const w of all) {
-                  await triggerDirectDownload(w);
-                  await new Promise((r) => setTimeout(r, 600));
-                }
-              }}
-            >
-              Download all {downloadChoice?.slides.length} wallpapers
-            </GlassButton>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* ================= AUTHENTICATION MODAL ================= */}
-      <Dialog open={isAuthModalOpen} onOpenChange={setIsAuthModalOpen}>
-        <DialogContent
-          style={{
-            background: "rgba(10, 10, 14, 0.88)",
-          }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5 shadow-[0_25px_70px_rgba(0,0,0,0.95)]"
-        >
-          <DialogHeader>
-            <div className="mx-auto h-11 w-11 rounded-2xl overflow-hidden border border-white/20 mb-1">
-              <img
-                src="/logo.webp"
-                alt="Fusion Logo"
-                className="h-full w-full object-cover"
-              />
-            </div>
-            <DialogTitle className="text-center text-base font-black text-white">
-              {authStep === "FORGOT_PASSWORD"
-                ? "Reset Your Password"
-                : authStep === "RESET_LINK_SENT"
-                ? "Check Your Email"
-                : authStep === "UPDATE_PASSWORD"
-                ? "Set New Password"
-                : authStep === "SIGN_UP"
-                ? "Create Free Account"
-                : "Sign In to Fusion"}
-            </DialogTitle>
-            <DialogDescription className="text-center text-white/75 text-[11px]">
-              {authStep === "FORGOT_PASSWORD"
-                ? "Enter your account email to receive a reset link."
-                : authStep === "RESET_LINK_SENT"
-                ? "Follow the reset link sent to your inbox."
-                : authStep === "UPDATE_PASSWORD"
-                ? "Choose a strong new password."
-                : authReason}
-            </DialogDescription>
-          </DialogHeader>
-
-          {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
-            <div className="grid grid-cols-2 gap-1.5 p-1 rounded-full bg-black/70 border border-white/15 mt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthStep("SIGN_IN");
-                  setAuthError(null);
-                  setAuthSuccessMsg(null);
-                }}
-                className={`py-1.5 rounded-full text-[11px] font-bold transition active:scale-95 ${
-                  authStep === "SIGN_IN"
-                    ? "glass-active-white"
-                    : "text-white/75 hover:text-white"
-                }`}
-              >
-                Sign In
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setAuthStep("SIGN_UP");
-                  setAuthError(null);
-                  setAuthSuccessMsg(null);
-                }}
-                className={`py-1.5 rounded-full text-[11px] font-bold transition active:scale-95 ${
-                  authStep === "SIGN_UP"
-                    ? "glass-active-white"
-                    : "text-white/75 hover:text-white"
-                }`}
-              >
-                Create Account
-              </button>
-            </div>
-          )}
-
-          {(authStep === "SIGN_IN" || authStep === "SIGN_UP") && (
-            <OAuthButtons
-              onGoogle={() => handleOAuthSignIn("google")}
-              onApple={() => handleOAuthSignIn("apple")}
-            />
-          )}
-
-          {authStep === "SIGN_IN" && (
-            <form onSubmit={handleSignInSubmit} className="space-y-3 pt-1">
-              {authSuccessMsg && (
-                <p className="text-[11px] text-emerald-300 bg-emerald-950/60 p-2.5 rounded-xl border border-emerald-400/30 text-center">
-                  {authSuccessMsg}
-                </p>
-              )}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
-                  <Input
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <div className="flex items-center justify-between">
-                  <label className="text-[11px] font-semibold text-white/90">
-                    Password
-                  </label>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAuthStep("FORGOT_PASSWORD");
-                      setAuthError(null);
-                      setAuthSuccessMsg(null);
-                    }}
-                    className="text-[11px] text-white hover:underline font-medium"
-                  >
-                    Forgot password?
-                  </button>
-                </div>
-                <PasswordInput
-                  required
-                  placeholder="••••••••"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                />
-              </div>
-              {authError && (
-                <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
-                  {authError}
-                </p>
-              )}
-              <GlassButton
-                type="submit"
-                typeShape="pill"
-                activeWhite={true}
-                disabled={authLoading}
-                className="w-full h-11 text-xs font-extrabold mt-1"
-              >
-                {authLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Log In"
-                )}
-              </GlassButton>
-            </form>
-          )}
-
-          {authStep === "SIGN_UP" && (
-            <form onSubmit={handleSignUpSubmit} className="space-y-2.5 pt-1">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
-                  <Input
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Create Password (min. 6 chars)
-                </label>
-                <PasswordInput
-                  required
-                  placeholder="••••••••"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Confirm Password
-                </label>
-                <PasswordInput
-                  required
-                  placeholder="••••••••"
-                  value={authConfirmPassword}
-                  onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                />
-              </div>
-              {authError && (
-                <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
-                  {authError}
-                </p>
-              )}
-              <GlassButton
-                type="submit"
-                typeShape="pill"
-                activeWhite={true}
-                disabled={authLoading}
-                className="w-full h-11 text-xs font-extrabold mt-1"
-              >
-                {authLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Sign Up"
-                )}
-              </GlassButton>
-            </form>
-          )}
-
-          {authStep === "FORGOT_PASSWORD" && (
-            <form
-              onSubmit={handleForgotPasswordSubmit}
-              className="space-y-3 pt-1"
-            >
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Account Email Address
-                </label>
-                <div className="relative">
-                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
-                  <Input
-                    type="email"
-                    required
-                    placeholder="you@example.com"
-                    value={authEmail}
-                    onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
-                  />
-                </div>
-              </div>
-              {authError && (
-                <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
-                  {authError}
-                </p>
-              )}
-              <GlassButton
-                type="submit"
-                typeShape="pill"
-                activeWhite={true}
-                disabled={authLoading || resendCooldown > 0}
-                className="w-full h-11 text-xs font-extrabold mt-1"
-              >
-                {authLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : resendCooldown > 0 ? (
-                  `Wait ${resendCooldown}s to Resend`
-                ) : (
-                  "Send Password Reset Link"
-                )}
-              </GlassButton>
-              <div className="text-center pt-1.5">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setAuthStep("SIGN_IN");
-                    setAuthError(null);
-                  }}
-                  className="text-[11px] text-white/80 hover:text-white inline-flex items-center gap-1 font-medium"
-                >
-                  <ArrowLeft className="h-3 w-3" /> Back to Sign In
-                </button>
-              </div>
-            </form>
-          )}
-
-          {authStep === "RESET_LINK_SENT" && (
-            <div className="space-y-3 pt-1 text-center">
-              <div className="p-3 rounded-xl bg-emerald-950/60 border border-emerald-400/30 text-[11px] text-emerald-200 leading-relaxed">
-                {authSuccessMsg ||
-                  "Check your email inbox (and spam folder) for the password reset link."}
-              </div>
-              <GlassButton
-                typeShape="pill"
-                onClick={() => {
-                  setAuthStep("SIGN_IN");
-                  setAuthError(null);
-                  setAuthSuccessMsg(null);
-                }}
-                className="w-full h-11 text-xs font-bold"
-              >
-                Return to Sign In
-              </GlassButton>
-            </div>
-          )}
-
-          {authStep === "UPDATE_PASSWORD" && (
-            <form
-              onSubmit={handleUpdateRecoveredPassword}
-              className="space-y-3 pt-1"
-            >
-              {authSuccessMsg && (
-                <p className="text-[11px] text-white bg-black/60 p-2.5 rounded-xl border border-white/20 text-center">
-                  {authSuccessMsg}
-                </p>
-              )}
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  New Password (min. 6 chars)
-                </label>
-                <PasswordInput
-                  required
-                  placeholder="••••••••"
-                  value={authPassword}
-                  onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
-                />
-              </div>
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/90 block">
-                  Confirm New Password
-                </label>
-                <PasswordInput
-                  required
-                  placeholder="••••••••"
-                  value={authConfirmPassword}
-                  onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
-                />
-              </div>
-              {authError && (
-                <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
-                  {authError}
-                </p>
-              )}
-              <GlassButton
-                type="submit"
-                typeShape="pill"
-                activeWhite={true}
-                disabled={authLoading}
-                className="w-full h-11 text-xs font-extrabold mt-1"
-              >
-                {authLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  "Save New Password"
-                )}
-              </GlassButton>
-            </form>
-          )}
-        </DialogContent>
-      </Dialog>
-
-      {/* ================= ACCOUNT SETTINGS MODAL ================= */}
-      <Dialog open={isSettingsModalOpen} onOpenChange={setIsSettingsModalOpen}>
-        <DialogContent
-          style={{
-            background: "rgba(10, 10, 14, 0.88)",
-          }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-base font-black text-white">
-              Account Settings
-            </DialogTitle>
-            <DialogDescription className="text-[11px] text-white/75">
-              Manage your profile display name and security credentials.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleSaveAccountSettings} className="space-y-3 mt-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Verified Email Address
-              </label>
-              <Input
-                type="email"
-                disabled
-                value={user?.email || ""}
-                className="bg-black/50 border-white/15 text-white/60 rounded-xl opacity-80 cursor-not-allowed h-10 text-xs"
-              />
-            </div>
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Display Name
-              </label>
-              <Input
-                type="text"
-                required
-                value={editDisplayName}
-                onChange={(e) => setEditDisplayName(e.target.value)}
-                className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs"
-              />
-            </div>
-            <div className="pt-2 border-t border-white/10 space-y-2">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold text-white">
-                <KeyRound className="h-3 w-3 text-white" />
-                <span>Change Password (Optional)</span>
-              </div>
-              <div className="space-y-1">
-                <label className="text-[10px] text-white/75 block">
-                  New Password
-                </label>
-                <Input
-                  type="password"
-                  placeholder="Leave blank to keep current"
-                  value={newPasswordInput}
-                  onChange={(e) => setNewPasswordInput(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs"
-                />
-              </div>
-              {newPasswordInput.length > 0 && (
-                <div className="space-y-1">
-                  <label className="text-[10px] text-white/75 block">
-                    Confirm New Password
-                  </label>
-                  <Input
-                    type="password"
-                    placeholder="Confirm new password"
-                    value={confirmNewPasswordInput}
-                    onChange={(e) => setConfirmNewPasswordInput(e.target.value)}
-                    className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs"
-                  />
-                </div>
-              )}
-            </div>
-            {settingsFeedback && (
-              <p
-                className={`text-[11px] p-2.5 rounded-xl border text-center ${
-                  settingsFeedback.type === "success"
-                    ? "bg-emerald-950/60 border-emerald-400/30 text-emerald-300"
-                    : "bg-red-950/60 border-red-400/30 text-red-300"
-                }`}
-              >
-                {settingsFeedback.text}
-              </p>
-            )}
-            <div className="flex items-center gap-2 pt-1">
-              <GlassButton
-                type="submit"
-                typeShape="pill"
-                activeWhite={true}
-                disabled={settingsLoading}
-                className="flex-1 h-10 text-xs font-extrabold"
-              >
-                {settingsLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <>
-                    <Check className="h-3.5 w-3.5" />
-                    <span>Save Changes</span>
-                  </>
-                )}
-              </GlassButton>
-              <GlassButton
-                typeShape="pill"
-                onClick={handleSignOut}
-                className="h-10 px-4 text-xs text-red-200"
-              >
-                Sign Out
-              </GlassButton>
-            </div>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ================= ADMIN UPLOAD MODAL ================= */}
-      <Dialog open={isUploadModalOpen} onOpenChange={setIsUploadModalOpen}>
-        <DialogContent
-          style={{
-            background: "rgba(10, 10, 14, 0.88)",
-          }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5 max-h-[88vh] overflow-y-auto overscroll-contain"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-base font-black text-white">
-              Upload New Wallpaper
-            </DialogTitle>
-            <DialogDescription className="text-[11px] text-white/75">
-              Publish a high-resolution wallpaper to Fusion Wallpapers.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleAdminUpload} className="space-y-3 mt-1">
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Wallpaper Name
-              </label>
-              <Input
-                type="text"
-                required
-                placeholder="e.g., Sung Jin-woo"
-                value={uploadTitle}
-                onChange={(e) => setUploadTitle(e.target.value)}
-                className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs"
-              />
-            </div>
-
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/85 block">
-                  Anime Category
-                </label>
-                <select
-                  value={uploadCategory}
-                  onChange={(e) => setUploadCategory(e.target.value)}
-                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
-                >
-                  <option value="none" className="bg-black text-white">
-                    None (Uncategorized)
-                  </option>
-                  {animeCategories.map((cat) => (
-                    <option
-                      key={cat.id}
-                      value={cat.id}
-                      className="bg-black text-white"
-                    >
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/85 block">
-                  PC Top 10 Rank
-                </label>
-                <select
-                  value={uploadTop10Rank}
-                  onChange={(e) => setUploadTop10Rank(e.target.value)}
-                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
-                >
-                  <option value="none" className="bg-black text-white">
-                    Auto (Not pinned)
-                  </option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <option
-                      key={num}
-                      value={String(num)}
-                      className="bg-black text-white"
-                    >
-                      Rank #{num}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 pt-0.5">
-              <input
-                type="checkbox"
-                id="uploadHeroCheck"
-                checked={uploadShowInHero}
-                onChange={(e) => setUploadShowInHero(e.target.checked)}
-                className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
-              />
-              <label
-                htmlFor="uploadHeroCheck"
-                className="text-xs font-medium text-white cursor-pointer select-none"
-              >
-                Show in PC Top Hero Banner
-              </label>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-white/85 block">
-                Wallpaper Image File
-              </label>
-              <Input
-                type="file"
-                accept="image/*"
-                multiple
-                onChange={(e) => {
-                  const picked = Array.from(e.target.files || []);
-                  const MAX = 30 * 1024 * 1024;
-                  const tooBig = picked.filter((f) => f.size > MAX);
-                  if (tooBig.length) alert(`Over 30 MB, skipped: ${tooBig.map((f) => f.name).join(", ")}`);
-                  setUploadFiles((prev) => [
-                    ...prev,
-                    ...picked
-                      .filter((f) => f.size <= MAX)
-                      .map((file) => ({
-                        id: `${file.name}-${file.size}-${Math.random().toString(36).slice(2, 6)}`,
-                        file,
-                        url: URL.createObjectURL(file),
-                      })),
-                  ]);
-                  e.target.value = "";
-                }}
-                className="bg-black/70 border-white/20 text-white/80 file:bg-white file:text-black file:border-0 file:rounded-lg file:px-2 file:py-1 file:mr-2 file:text-[11px] file:font-bold rounded-xl h-10 py-1 text-xs"
-              />
-            </div>
-
-            {uploadFiles.length > 0 && (
-              <div className="space-y-2">
-                <p className="text-[11px] text-white/60">
-                  {uploadFiles.length > 1
-                    ? "Batch: #1 shows first. Use the arrows to change the order."
-                    : "1 wallpaper selected."}
-                </p>
-                <div className="grid grid-cols-3 gap-2">
-                  {uploadFiles.map((f, i) => (
-                    <div key={f.id} className="relative overflow-hidden rounded-xl border border-white/15 bg-black">
-                      <img src={f.url} alt="" className="aspect-[9/16] w-full object-cover" />
-                      <span className="absolute left-1 top-1 rounded-full bg-black/60 px-1.5 text-[10px] font-bold text-white">
-                        {i + 1}
-                      </span>
-                      <div className="absolute inset-x-0 bottom-0 flex items-center justify-between bg-black/60 p-1 text-white">
-                        <button type="button" aria-label="Move earlier" disabled={i === 0} onClick={() => moveUpload(i, -1)} className="disabled:opacity-30">
-                          <ChevronLeft className="h-4 w-4" />
-                        </button>
-                        <button type="button" aria-label="Remove" onClick={() => removeUpload(f.id)}>
-                          <Trash2 className="h-3.5 w-3.5 text-red-400" />
-                        </button>
-                        <button type="button" aria-label="Move later" disabled={i === uploadFiles.length - 1} onClick={() => moveUpload(i, 1)} className="disabled:opacity-30">
-                          <ChevronRight className="h-4 w-4" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            <GlassButton
-              type="submit"
-              typeShape="pill"
-              activeWhite={true}
-              disabled={uploading || uploadFiles.length === 0}
-              className="w-full h-11 text-xs font-extrabold mt-1"
-            >
-              {uploading ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Uploading...</span>
-                </>
-              ) : (
-                uploadFiles.length > 1 ? `Publish ${uploadFiles.length} wallpapers` : "Publish Wallpaper"
-              )}
-            </GlassButton>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {/* ================= ADMIN EDIT WALLPAPER MODAL ================= */}
-      <Dialog open={isEditModalOpen} onOpenChange={setIsEditModalOpen}>
-        <DialogContent
-          style={{
-            background: "rgba(10, 10, 14, 0.88)",
-          }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5"
-        >
-          <DialogHeader>
-            <DialogTitle className="text-base font-black text-white">
-              Edit Wallpaper & PC Placement
-            </DialogTitle>
-            <DialogDescription className="text-[11px] text-white/75">
-              Update category, anime banner, PC Hero Banner, or Top 10 ranking.
-            </DialogDescription>
-          </DialogHeader>
-
-          <form onSubmit={handleAdminEditSubmit} className="space-y-3 mt-1">
-            <div className="grid grid-cols-2 gap-2.5">
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/85 block">
-                  Select Category
-                </label>
-                <select
-                  value={editCategorySelection}
-                  onChange={(e) => setEditCategorySelection(e.target.value)}
-                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
-                >
-                  <option value="none" className="bg-black text-white">
-                    None (Uncategorized)
-                  </option>
-                  {animeCategories.map((cat) => (
-                    <option
-                      key={cat.id}
-                      value={cat.id}
-                      className="bg-black text-white"
-                    >
-                      {cat.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="space-y-1">
-                <label className="text-[11px] font-semibold text-white/85 block">
-                  PC Top 10 Rank
-                </label>
-                <select
-                  value={editTop10Rank}
-                  onChange={(e) => setEditTop10Rank(e.target.value)}
-                  className="w-full h-10 bg-black/70 border border-white/20 text-white text-xs rounded-xl px-2.5 focus:outline-none"
-                >
-                  <option value="none" className="bg-black text-white">
-                    Auto (Not pinned)
-                  </option>
-                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((num) => (
-                    <option
-                      key={num}
-                      value={String(num)}
-                      className="bg-black text-white"
-                    >
-                      Rank #{num}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="setBannerCheck"
-                  checked={editSetAsBanner}
-                  onChange={(e) => setEditSetAsBanner(e.target.checked)}
-                  className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
-                />
-                <label
-                  htmlFor="setBannerCheck"
-                  className="text-xs font-medium text-white cursor-pointer select-none"
-                >
-                  Set as category banner image
-                </label>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="editHeroCheck"
-                  checked={editShowInHero}
-                  onChange={(e) => setEditShowInHero(e.target.checked)}
-                  className="h-4 w-4 rounded border-white/30 text-white focus:ring-white bg-black/50 cursor-pointer"
-                />
-                <label
-                  htmlFor="editHeroCheck"
-                  className="text-xs font-medium text-white cursor-pointer select-none"
-                >
-                  Show in PC Top Hero Banner
-                </label>
-              </div>
-            </div>
-
-            <GlassButton
-              type="submit"
-              typeShape="pill"
-              activeWhite={true}
-              disabled={editingWallpaper}
-              className="w-full h-11 text-xs font-extrabold mt-1"
-            >
-              {editingWallpaper ? (
-                <>
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                "Save Changes"
-              )}
-            </GlassButton>
-          </form>
-        </DialogContent>
-      </Dialog>
-    </div>
-  );
-}
+   
