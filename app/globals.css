@@ -164,7 +164,38 @@ body {
 .fusion-col > .fusion-card:nth-child(4) { animation-delay: 150ms; }
 .fusion-col > .fusion-card:nth-child(n + 5) { animation: none; }
 
+/* New picture slides in from the side: blur, slight stretch, small bounce */
+@keyframes fusion-in-right {
+  0%   { opacity: 0; transform: translateX(30%) scaleX(1.1); filter: blur(10px); }
+  65%  { opacity: 1; transform: translateX(-2.5%) scaleX(1.01); filter: blur(1px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+@keyframes fusion-in-left {
+  0%   { opacity: 0; transform: translateX(-30%) scaleX(1.1); filter: blur(10px); }
+  65%  { opacity: 1; transform: translateX(2.5%) scaleX(1.01); filter: blur(1px); }
+  100% { opacity: 1; transform: none; filter: none; }
+}
+/* Old picture blurs away */
+@keyframes fusion-out-left  { to { opacity: 0; transform: translateX(-24%) scaleX(1.06); filter: blur(10px); } }
+@keyframes fusion-out-right { to { opacity: 0; transform: translateX(24%) scaleX(1.06); filter: blur(10px); } }
+/* Wallpaper appears after tapping a related one */
+@keyframes fusion-photo-in {
+  from { opacity: 0; transform: translateY(16px) scale(0.96); filter: blur(12px); }
+  to   { opacity: 1; transform: none; filter: none; }
+}
+
+.fusion-in-right  { animation: fusion-in-right 460ms var(--ease-soft) both; }
+.fusion-in-left   { animation: fusion-in-left 460ms var(--ease-soft) both; }
+.fusion-out-left  { animation: fusion-out-left 300ms ease-in both; }
+.fusion-out-right { animation: fusion-out-right 300ms ease-in both; }
+.fusion-photo-in  { animation: fusion-photo-in 420ms var(--ease-soft) both; }
+
+/* Wallpaper box smoothly changes height when the next picture is a different size */
+.fusion-box { transition: transform 150ms ease-out, aspect-ratio 420ms var(--ease-soft); }
+
 @media (prefers-reduced-motion: reduce) {
   .fusion-page, .fusion-rise, .fusion-fade, .fusion-sheet-in, .fusion-sheet-out,
-  .fusion-pop, .fusion-stretch, .fusion-icon-settle, .fusion-card { animation: none !important; }
+  .fusion-pop, .fusion-stretch, .fusion-icon-settle, .fusion-card,
+  .fusion-in-right, .fusion-in-left, .fusion-out-left, .fusion-out-right, .fusion-photo-in { animation: none !important; }
+  .fusion-box { transition: none; }
 }
