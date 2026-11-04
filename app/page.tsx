@@ -1865,7 +1865,7 @@ export default function FusionWallpapersApp() {
 
       {/* ================= SEARCH BAR & PILLS ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
-        <div className="relative max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-2 z-[60] flex flex-col gap-2.5">
+        <div className="relative max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-2 z-40 flex flex-col gap-2.5">
           <SearchBar
             isLight={isLight}
             searchQuery={searchQuery}
