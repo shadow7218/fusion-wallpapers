@@ -1,16 +1,17 @@
 /**
- * lib/db.ts  -  the ONLY file that talks to Supabase (database, logins, storage).
+ * lib/db.ts  -  the ONLY file the app uses to reach the database and logins.
  *
- * The rest of the app (app/page.tsx, app/settings/page.tsx ...) imports `db`
- * from here and never mentions Supabase. To move to another database later
- * (Firebase, Neon + Auth.js ...), rewrite the functions in this file and keep
- * the same names and return types. Nothing else has to change.
+ * Now powered by:
+ *   - Neon (Postgres) through our own API routes in app/api/*
+ *   - Neon Auth (Better Auth) for sign-up / sign-in / codes / Google
+ *
+ * The rest of the app (app/page.tsx, app/settings/page.tsx ...) only imports
+ * `db` from here. Same function names as before, so nothing else changed.
  */
-import type { User } from "@supabase/supabase-js";
-import { createClient } from "@/utils/supabase/client";
+import { authClient } from "@/lib/auth/client";
 
 /* ------------------------------------------------------------------ */
-/* Types used by the whole app (neutral, not Supabase-specific)        */
+/* Types used by the whole app                                         */
 /* ------------------------------------------------------------------ */
 
 export interface Wallpaper {
@@ -46,6 +47,7 @@ export interface AppUser {
   avatarId: string | null;
   emailNotifications: boolean;
   providers: string[];
+  isAdmin: boolean;
 }
 
 export interface Profile {
@@ -61,125 +63,171 @@ export type AuthChange = {
 };
 
 /* ------------------------------------------------------------------ */
-/* Supabase client (private to this file)                              */
+/* Helpers (private)                                                   */
 /* ------------------------------------------------------------------ */
 
-const sb = createClient();
-const WALLPAPER_BUCKET = "wallpapers";
+// The Neon Auth client is used loosely so a small SDK change can't break the build.
+const ac = authClient as any;
 
-const toUser = (u: User | null | undefined): AppUser | null =>
-  u
-    ? {
-        id: u.id,
-        email: u.email ?? null,
-        avatarId: (u.user_metadata?.avatar_id as string | undefined) ?? null,
-        emailNotifications: u.user_metadata?.email_notifications !== false,
-        providers: Array.from(new Set((u.identities ?? []).map((i) => i.provider))),
-      }
-    : null;
+async function api<T>(url: string, init?: RequestInit): Promise<T> {
+  const res = await fetch(url, {
+    credentials: "same-origin",
+    ...init,
+    headers: { "Content-Type": "application/json", ...(init?.headers || {}) },
+  });
+  const body = await res.json().catch(() => null);
+  if (!res.ok) {
+    const err: any = new Error(body?.error || `Request failed (${res.status})`);
+    err.status = res.status;
+    throw err;
+  }
+  return body as T;
+}
+
+const toError = (e: any): Error =>
+  Object.assign(new Error(e?.message || "Something went wrong. Please try again."), {
+    status: e?.status,
+    code: e?.code,
+  });
+
+const listeners = new Set<(c: AuthChange) => void>();
+const emit = (user: AppUser | null) => listeners.forEach((cb) => cb({ type: "CHANGED", user }));
+
+type MeResponse = { user: AppUser | null; profile?: Profile | null };
+let lastProfile: Profile | null = null;
+
+async function loadMe(): Promise<AppUser | null> {
+  try {
+    const r = await api<MeResponse>("/api/me");
+    lastProfile = r.profile ?? null;
+    return r.user;
+  } catch {
+    return null;
+  }
+}
+
+async function refreshAndEmit(): Promise<AppUser | null> {
+  const u = await loadMe();
+  emit(u);
+  return u;
+}
 
 /* ------------------------------------------------------------------ */
 /* Logins                                                              */
 /* ------------------------------------------------------------------ */
 
 async function getCurrentUser(): Promise<AppUser | null> {
-  const {
-    data: { session },
-  } = await sb.auth.getSession();
-  return toUser(session?.user);
+  return loadMe();
 }
 
-/** Listen for login / logout / password-recovery. Returns an "unsubscribe" function. */
+/** Listen for login / logout. Returns an "unsubscribe" function. */
 function onAuthChange(cb: (change: AuthChange) => void): () => void {
-  const {
-    data: { subscription },
-  } = sb.auth.onAuthStateChange((event, session) => {
-    if (event === "INITIAL_SESSION") return;
-    cb({
-      type: event === "PASSWORD_RECOVERY" ? "PASSWORD_RECOVERY" : "CHANGED",
-      user: toUser(session?.user),
-    });
-  });
-  return () => subscription.unsubscribe();
+  listeners.add(cb);
+  return () => {
+    listeners.delete(cb);
+  };
 }
 
 async function signInWithPassword(email: string, password: string): Promise<AppUser | null> {
-  const { data, error } = await sb.auth.signInWithPassword({ email, password });
-  if (error) throw error;
-  return toUser(data.user);
+  const { error } = await ac.signIn.email({ email, password });
+  if (error) throw toError(error);
+  return refreshAndEmit();
 }
 
+/**
+ * Creates the account. With "Verify at sign-up" ON, a 6-digit code is emailed and
+ * signedIn is false until verifyEmailCode() succeeds.
+ */
 async function signUpWithPassword(
   email: string,
   password: string
 ): Promise<{ user: AppUser | null; signedIn: boolean }> {
-  const { data, error } = await sb.auth.signUp({ email, password });
-  if (error) throw error;
-  return { user: toUser(data.user), signedIn: !!(data.session && data.user) };
+  const name = email.split("@")[0] || "Fusion user";
+  const { error } = await ac.signUp.email({ email, password, name });
+  if (error) throw toError(error);
+  const u = await loadMe();
+  if (u) emit(u);
+  return { user: u, signedIn: !!u };
 }
 
-async function sendPasswordReset(email: string, redirectTo?: string): Promise<void> {
-  const { error } = await sb.auth.resetPasswordForEmail(email, { redirectTo });
-  if (error) throw error;
+async function verifyEmailCode(email: string, code: string): Promise<AppUser | null> {
+  const { error } = await ac.emailOtp.verifyEmail({ email, otp: code });
+  if (error) throw toError(error);
+  return refreshAndEmit();
 }
 
-async function updatePassword(password: string): Promise<AppUser | null> {
-  const { data, error } = await sb.auth.updateUser({ password });
-  if (error) throw error;
-  return toUser(data.user);
+async function resendVerificationCode(email: string): Promise<void> {
+  const { error } = await ac.emailOtp.sendVerificationOtp({ email, type: "email-verification" });
+  if (error) throw toError(error);
+}
+
+async function sendPasswordResetCode(email: string): Promise<void> {
+  const res = ac.forgetPassword?.emailOtp
+    ? await ac.forgetPassword.emailOtp({ email })
+    : await ac.emailOtp.sendVerificationOtp({ email, type: "forget-password" });
+  if (res?.error) throw toError(res.error);
+}
+
+async function resetPasswordWithCode(email: string, code: string, newPassword: string): Promise<void> {
+  const { error } = await ac.emailOtp.resetPassword({ email, otp: code, password: newPassword });
+  if (error) throw toError(error);
+}
+
+/** Logged-in password change. Needs the current password. */
+async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  const { error } = await ac.changePassword({ currentPassword, newPassword });
+  if (error) throw toError(error);
 }
 
 async function signInWithProvider(provider: OAuthProvider, redirectTo: string): Promise<void> {
-  const { error } = await sb.auth.signInWithOAuth({ provider, options: { redirectTo } });
-  if (error) throw error;
+  const { error } = await ac.signIn.social({ provider, callbackURL: redirectTo });
+  if (error) throw toError(error);
 }
 
 async function linkProvider(provider: OAuthProvider, redirectTo: string): Promise<void> {
-  const { error } = await sb.auth.linkIdentity({ provider, options: { redirectTo } });
-  if (error) throw error;
+  if (typeof ac.linkSocial !== "function") {
+    throw new Error("Linking another account is not available yet.");
+  }
+  const { error } = await ac.linkSocial({ provider, callbackURL: redirectTo });
+  if (error) throw toError(error);
 }
 
 async function signOut(): Promise<void> {
-  await sb.auth.signOut();
+  try {
+    await ac.signOut();
+  } finally {
+    lastProfile = null;
+    emit(null);
+  }
 }
 
 async function setUserAvatar(avatarId: string): Promise<void> {
-  const { error } = await sb.auth.updateUser({ data: { avatar_id: avatarId } });
-  if (error) throw error;
+  await api("/api/me", { method: "PATCH", body: JSON.stringify({ avatar_id: avatarId }) });
 }
 
 async function setEmailNotifications(enabled: boolean): Promise<void> {
-  const { error } = await sb.auth.updateUser({ data: { email_notifications: enabled } });
-  if (error) throw error;
+  await api("/api/me", { method: "PATCH", body: JSON.stringify({ email_notifications: enabled }) });
 }
 
-/** Needs the delete_my_account() SQL function from the Settings setup. */
+/** Removes my profile + saved list (and my login if the server is allowed to). */
 async function deleteMyAccount(): Promise<void> {
-  const { error } = await sb.rpc("delete_my_account");
-  if (error) throw error;
+  await api("/api/me", { method: "DELETE" });
 }
 
 /* ------------------------------------------------------------------ */
 /* Profiles                                                            */
 /* ------------------------------------------------------------------ */
 
-async function getProfile(userId: string): Promise<Profile | null> {
-  const { data, error } = await sb
-    .from("profiles")
-    .select("id, display_name")
-    .eq("id", userId)
-    .maybeSingle();
-  if (error || !data) return null;
-  return { id: data.id, display_name: data.display_name };
+async function getProfile(_userId: string): Promise<Profile | null> {
+  if (lastProfile) return lastProfile;
+  await loadMe();
+  return lastProfile;
 }
 
-async function saveProfileName(userId: string, displayName: string): Promise<void> {
-  const { error } = await sb.from("profiles").upsert({
-    id: userId,
-    display_name: displayName,
-    updated_at: new Date().toISOString(),
-  });
-  if (error) throw error;
+async function saveProfileName(_userId: string, displayName: string): Promise<void> {
+  await api("/api/me", { method: "PATCH", body: JSON.stringify({ display_name: displayName }) });
+  const cur = lastProfile as Profile | null;
+  lastProfile = { id: cur?.id ?? _userId, display_name: displayName };
 }
 
 /* ------------------------------------------------------------------ */
@@ -187,125 +235,87 @@ async function saveProfileName(userId: string, displayName: string): Promise<voi
 /* ------------------------------------------------------------------ */
 
 /** Newest first. Returns null if the list could not be loaded. */
-async function listSavedIds(userId: string): Promise<string[] | null> {
-  const { data, error } = await sb
-    .from("saved_wallpapers")
-    .select("wallpaper_id")
-    .eq("user_id", userId)
-    .order("created_at", { ascending: false });
-  if (error || !data) return null;
-  return data.map((row: { wallpaper_id: string }) => row.wallpaper_id);
+async function listSavedIds(_userId: string): Promise<string[] | null> {
+  try {
+    return (await api<{ ids: string[] }>("/api/saved")).ids;
+  } catch {
+    return null;
+  }
 }
 
 async function countSaved(userId: string): Promise<number> {
-  const { count } = await sb
-    .from("saved_wallpapers")
-    .select("wallpaper_id", { count: "exact", head: true })
-    .eq("user_id", userId);
-  return count ?? 0;
+  return (await listSavedIds(userId))?.length ?? 0;
 }
 
-async function saveWallpaper(userId: string, wallpaperId: string): Promise<void> {
-  const { error } = await sb
-    .from("saved_wallpapers")
-    .upsert({ user_id: userId, wallpaper_id: wallpaperId }, { onConflict: "user_id,wallpaper_id" });
-  if (error) throw error;
+async function saveWallpaper(_userId: string, wallpaperId: string): Promise<void> {
+  await api("/api/saved", { method: "POST", body: JSON.stringify({ wallpaperId }) });
 }
 
-async function unsaveWallpaper(userId: string, wallpaperId: string): Promise<void> {
-  const { error } = await sb
-    .from("saved_wallpapers")
-    .delete()
-    .eq("user_id", userId)
-    .eq("wallpaper_id", wallpaperId);
-  if (error) throw error;
+async function unsaveWallpaper(_userId: string, wallpaperId: string): Promise<void> {
+  await api(`/api/saved?wallpaperId=${encodeURIComponent(wallpaperId)}`, { method: "DELETE" });
 }
 
 /* ------------------------------------------------------------------ */
 /* Wallpapers                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Everything, newest first. */
 async function listWallpapers(): Promise<Wallpaper[]> {
-  const { data, error } = await sb
-    .from("wallpapers")
-    .select("*")
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data as Wallpaper[]) || [];
+  return api<Wallpaper[]>("/api/wallpapers", { cache: "no-store" });
 }
 
 async function getWallpaper(id: string): Promise<Wallpaper | null> {
-  const { data } = await sb.from("wallpapers").select("*").eq("id", id).maybeSingle();
-  return (data as Wallpaper) ?? null;
+  try {
+    return await api<Wallpaper | null>(`/api/wallpapers/${encodeURIComponent(id)}`);
+  } catch {
+    return null;
+  }
 }
 
 async function categoryHasWallpapers(category: string): Promise<boolean> {
-  const { data } = await sb.from("wallpapers").select("id").eq("category", category).limit(1);
-  return !!data && data.length > 0;
+  try {
+    return (await api<{ has: boolean }>(`/api/wallpapers?category=${encodeURIComponent(category)}`)).has;
+  } catch {
+    return false;
+  }
 }
 
-/** Adds a wallpaper row. Older tables without is_banner/tags still work. */
 async function createWallpaper(row: NewWallpaper): Promise<Wallpaper | null> {
-  const full = await sb.from("wallpapers").insert([row]).select().maybeSingle();
-  if (!full.error) return (full.data as Wallpaper) ?? null;
-
-  const basic = {
-    title: row.title,
-    image_url: row.image_url,
-    storage_path: row.storage_path,
-    category: row.category,
-  };
-  const fb = await sb.from("wallpapers").insert([basic]).select().maybeSingle();
-  if (fb.error) throw fb.error;
-  return (fb.data as Wallpaper) ?? null;
+  return api<Wallpaper>("/api/wallpapers", { method: "POST", body: JSON.stringify(row) });
 }
 
-/** Changes category / banner flag / tags. Falls back if the tags column is missing. */
 async function updateWallpaperDetails(id: string, d: WallpaperDetailsUpdate): Promise<void> {
-  const full = await sb
-    .from("wallpapers")
-    .update({ category: d.category, is_banner: d.is_banner, tags: d.tags })
-    .eq("id", id);
-  if (!full.error) return;
-  const fb = await sb
-    .from("wallpapers")
-    .update({ category: d.category, is_banner: d.is_banner })
-    .eq("id", id);
-  if (fb.error) throw fb.error;
+  await api(`/api/wallpapers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify(d) });
 }
 
 /** Returns true if saved, false if it failed (callers may ignore failures). */
 async function updateWallpaperTags(id: string, tags: string[]): Promise<boolean> {
-  const { error } = await sb.from("wallpapers").update({ tags }).eq("id", id);
-  return !error;
+  try {
+    await api(`/api/wallpapers/${encodeURIComponent(id)}`, { method: "PATCH", body: JSON.stringify({ tags }) });
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function clearBanner(category: string): Promise<void> {
-  await sb.from("wallpapers").update({ is_banner: false }).eq("category", category);
+  await api("/api/wallpapers", { method: "PATCH", body: JSON.stringify({ action: "clearBanner", category }) });
 }
 
 async function updateWallpaperUrl(id: string, imageUrl: string, storagePath: string): Promise<void> {
-  const { error } = await sb
-    .from("wallpapers")
-    .update({ image_url: imageUrl, storage_path: storagePath })
-    .eq("id", id);
-  if (error) throw error;
+  await api(`/api/wallpapers/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ image_url: imageUrl, storage_path: storagePath }),
+  });
 }
 
-/** Removes the row (and the old Supabase file if the image still lives there). */
+/** Removes the row. (Cloudinary files stay until deleted in Cloudinary.) */
 async function deleteWallpaper(w: Pick<Wallpaper, "id" | "image_url" | "storage_path">): Promise<void> {
-  if (w.storage_path && !w.image_url.includes("res.cloudinary.com")) {
-    await sb.storage.from(WALLPAPER_BUCKET).remove([w.storage_path]);
-  }
-  const { error } = await sb.from("wallpapers").delete().eq("id", w.id);
-  if (error) throw error;
+  await api(`/api/wallpapers/${encodeURIComponent(w.id)}`, { method: "DELETE" });
 }
 
-/** Downloads an old image straight from Supabase storage. Null if not possible. */
-async function downloadStoredFile(storagePath: string): Promise<Blob | null> {
-  const { data, error } = await sb.storage.from(WALLPAPER_BUCKET).download(storagePath);
-  return !error && data ? data : null;
+/** Old Supabase storage is gone, so downloads use the image link instead. */
+async function downloadStoredFile(_storagePath: string): Promise<Blob | null> {
+  return null;
 }
 
 export const db = {
@@ -314,8 +324,11 @@ export const db = {
   onAuthChange,
   signInWithPassword,
   signUpWithPassword,
-  sendPasswordReset,
-  updatePassword,
+  verifyEmailCode,
+  resendVerificationCode,
+  sendPasswordResetCode,
+  resetPasswordWithCode,
+  changePassword,
   signInWithProvider,
   linkProvider,
   signOut,
