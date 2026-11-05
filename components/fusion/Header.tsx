@@ -38,7 +38,7 @@ export default function Header({
 }: HeaderProps) {
   return (
     <header
-      className={`md:sticky top-0 z-30 backdrop-blur-xl px-3 md:px-4 pt-3 pb-2.5 border-b transition-colors ${
+      className={`sticky top-0 z-30 backdrop-blur-xl px-3 md:px-4 pt-3 pb-2.5 border-b transition-colors ${
         isLight
           ? "bg-[#F4FEFF]/80 border-[#0E2F76]/10 shadow-[0_2px_12px_rgba(14,47,118,0.08)]"
           : "bg-black/70 border-white/10"
