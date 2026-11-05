@@ -26,6 +26,23 @@ export interface Profile {
 }
 
 export const db = {
+  // --- ADMIN CHECK (Reads server-side ADMIN_UUID) ---
+  async checkIsAdmin(userIdentifier: string | null | undefined): Promise<boolean> {
+    if (!userIdentifier) return false;
+    try {
+      const res = await fetch("/api/admin-check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userIdentifier }),
+      });
+      if (!res.ok) return false;
+      const data = await res.json();
+      return !!data.isAdmin;
+    } catch {
+      return false;
+    }
+  },
+
   // --- AUTHENTICATION ---
   async getCurrentUser(): Promise<AppUser | null> {
     try {
