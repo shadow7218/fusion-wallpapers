@@ -76,6 +76,7 @@ export default function SettingsPage() {
   const [open, setOpen] = useState<"name" | "password" | "privacy" | null>(null);
   const [nameInput, setNameInput] = useState("");
   const [passInput, setPassInput] = useState("");
+  const [currentPassInput, setCurrentPassInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -158,21 +159,23 @@ export default function SettingsPage() {
 
   const savePassword = async () => {
     if (busy) return;
-    if (passInput.length < 6) return flash(false, "Password must be at least 6 characters.");
+    if (!currentPassInput) return flash(false, "Enter your current password.");
+    if (passInput.length < 6) return flash(false, "New password must be at least 6 characters.");
     setBusy(true);
     try {
-      await db.updatePassword(passInput);
+      await db.changePassword(currentPassInput, passInput);
     } catch (err: any) {
       setBusy(false);
       return flash(false, err.message);
     }
     setBusy(false);
     setPassInput("");
+    setCurrentPassInput("");
     setOpen(null);
     flash(true, "Password updated.");
   };
 
-  // Linking needs "Allow manual linking" enabled in the Supabase dashboard.
+  // Linking another login method (needs Neon Auth to allow account linking).
   const linkProvider = async (provider: "google") => {
     try {
       await db.linkProvider(provider, `${window.location.origin}/settings`);
@@ -209,7 +212,7 @@ export default function SettingsPage() {
   }
 
   const providers = user.providers;
-  const pretty = (p: string) => p.charAt(0).toUpperCase() + p.slice(1);
+  const pretty = (p: string) => (p === "credential" ? "Email" : p.charAt(0).toUpperCase() + p.slice(1));
   const avatarId = user.avatarId ?? undefined;
 
   return (
@@ -329,9 +332,15 @@ export default function SettingsPage() {
                   right={<ChevronRight className="h-5 w-5" style={{ color: "var(--s-muted)" }} />}
                 />
                 {open === "password" && (
-                  <div className="fusion-rise flex gap-2 px-4 pb-4">
-                    <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="New password (min. 6)" className="s-input" />
-                    <button type="button" onClick={savePassword} disabled={busy} className="s-btn">Save</button>
+                  <div className="fusion-rise flex flex-col gap-2 px-4 pb-4">
+                    <input type="password" value={currentPassInput} onChange={(e) => setCurrentPassInput(e.target.value)} placeholder="Current password" className="s-input" />
+                    <div className="flex gap-2">
+                      <input type="password" value={passInput} onChange={(e) => setPassInput(e.target.value)} placeholder="New password (min. 6)" className="s-input" />
+                      <button type="button" onClick={savePassword} disabled={busy} className="s-btn">Save</button>
+                    </div>
+                    <p className="text-[11px]" style={{ color: "var(--s-muted)" }}>
+                      Signed in with Google? You don&apos;t have a password to change.
+                    </p>
                   </div>
                 )}
               </div>
