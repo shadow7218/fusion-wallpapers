@@ -13,7 +13,7 @@ export async function POST(req: Request) {
       userIdentifier.trim().toLowerCase() === adminIdentifier.trim().toLowerCase();
 
     return NextResponse.json({ isAdmin });
-  } catch (err: any) {
+  } catch {
     return NextResponse.json({ isAdmin: false }, { status: 500 });
   }
 }
