@@ -89,6 +89,9 @@ type AuthStep =
   | "RESET_LINK_SENT"
   | "UPDATE_PASSWORD";
 
+const ADMIN_UUID =
+  process.env.NEXT_PUBLIC_ADMIN_UUID || "ccd4e82e-93fe-427f-a163-e19367b08649";
+
 const HERO_TAG = "__pc_hero__";
 const TOP10_TAG_PREFIX = "__top10_";
 const PHONE_TAG = "__device_phone__";
@@ -209,7 +212,6 @@ export default function FusionWallpapersApp() {
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [savingInProgressIds, setSavingInProgressIds] = useState<string[]>([]);
   const [revealFullEmail, setRevealFullEmail] = useState<boolean>(false);
-  const [isAdmin, setIsAdmin] = useState<boolean>(false);
 
   const [activeTab, setActiveTab] = useState<
     "home" | "explore" | "saved" | "profile"
@@ -309,15 +311,8 @@ export default function FusionWallpapersApp() {
 
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
 
+  const isAdmin = user?.id === ADMIN_UUID;
   const isLight = theme === "light";
-
-  useEffect(() => {
-    if (!user) {
-      setIsAdmin(false);
-      return;
-    }
-    db.checkIsAdmin(user.email || user.id).then(setIsAdmin);
-  }, [user]);
 
   useEffect(() => {
     const saved = localStorage.getItem("fusion-theme");
@@ -1868,9 +1863,9 @@ export default function FusionWallpapersApp() {
         }
       />
 
-      {/* ================= LIQUID GLASS SEARCH BAR & PILLS ================= */}
+      {/* ================= SEARCH BAR & PILLS ================= */}
       {(activeTab === "home" || activeTab === "explore") && (
-        <div className="relative max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-2 z-40 flex flex-col gap-2.5">
+        <div className="max-w-6xl w-full mx-auto px-3 md:px-4 pt-3 pb-2 z-10 space-y-2.5">
           <SearchBar
             isLight={isLight}
             searchQuery={searchQuery}
@@ -3026,7 +3021,7 @@ export default function FusionWallpapersApp() {
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
+                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
                 />
               </div>
               {authError && (
