@@ -90,6 +90,34 @@ const toError = (e: any): Error =>
     code: e?.code,
   });
 
+/** "https://site.com/page?x=1" -> "/page?x=1" (Neon Auth wants a path on our own site). */
+const toPath = (url: string): string => {
+  try {
+    const u = new URL(url, window.location.origin);
+    return u.pathname + u.search;
+  } catch {
+    return "/";
+  }
+};
+
+/**
+ * Finishes a Google sign-in. When Google sends the visitor back, the address
+ * carries a one-time code (neon_auth_session_verifier). The Neon client has to
+ * exchange it for a login session, which happens when it loads the session.
+ */
+async function syncClientSession(): Promise<void> {
+  try {
+    await ac.getSession();
+  } catch {
+    /* not signed in, that's fine */
+  }
+  if (typeof window !== "undefined" && window.location.search.includes("neon_auth_session_verifier")) {
+    const url = new URL(window.location.href);
+    url.searchParams.delete("neon_auth_session_verifier");
+    window.history.replaceState({}, "", url.pathname + url.search + url.hash);
+  }
+}
+
 const listeners = new Set<(c: AuthChange) => void>();
 const emit = (user: AppUser | null) => listeners.forEach((cb) => cb({ type: "CHANGED", user }));
 
@@ -117,6 +145,7 @@ async function refreshAndEmit(): Promise<AppUser | null> {
 /* ------------------------------------------------------------------ */
 
 async function getCurrentUser(): Promise<AppUser | null> {
+  await syncClientSession();
   return loadMe();
 }
 
@@ -180,7 +209,7 @@ async function changePassword(currentPassword: string, newPassword: string): Pro
 }
 
 async function signInWithProvider(provider: OAuthProvider, redirectTo: string): Promise<void> {
-  const { error } = await ac.signIn.social({ provider, callbackURL: redirectTo });
+  const { error } = await ac.signIn.social({ provider, callbackURL: toPath(redirectTo) });
   if (error) throw toError(error);
 }
 
@@ -188,7 +217,7 @@ async function linkProvider(provider: OAuthProvider, redirectTo: string): Promis
   if (typeof ac.linkSocial !== "function") {
     throw new Error("Linking another account is not available yet.");
   }
-  const { error } = await ac.linkSocial({ provider, callbackURL: redirectTo });
+  const { error } = await ac.linkSocial({ provider, callbackURL: toPath(redirectTo) });
   if (error) throw toError(error);
 }
 
