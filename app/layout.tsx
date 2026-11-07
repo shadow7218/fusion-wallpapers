@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { ogImg } from "@/lib/img";
+import CookieConsent from "@/components/CookieConsent";
 import "./globals.css";
 import "./liquid-glass.css";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
       </head>
       <body className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative">
         {children}
+        <CookieConsent />
       </body>
     </html>
   );
