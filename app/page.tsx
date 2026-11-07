@@ -66,7 +66,7 @@ interface UserProfile {
 }
 
 // Set to false to go back to the old pop-up login window.
-const USE_LOGIN_PAGE = true;
+const USE_LOGIN_PAGE = false;
 
 interface PendingIntent {
   type: "download" | "save" | "saved_tab" | "profile_tab";
@@ -2363,7 +2363,14 @@ export default function FusionWallpapersApp() {
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                {animeCategories.map((cat) => {
+                {[...animeCategories]
+                  .map((cat, order) => ({
+                    cat,
+                    order,
+                    count: wallpapers.filter((w) => getWallpaperCategory(w) === cat.id).length,
+                  }))
+                  .sort((a, b) => b.count - a.count || a.order - b.order)
+                  .map(({ cat }) => {
                   const catWallpapers = wallpapers.filter(
                     (w) => getWallpaperCategory(w) === cat.id
                   );
