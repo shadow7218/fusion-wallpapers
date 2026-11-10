@@ -37,6 +37,7 @@ import {
   Flame,
   Moon,
   Sun,
+  LayoutDashboard,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import PasswordInput from "@/components/PasswordInput";
@@ -67,6 +68,17 @@ interface UserProfile {
 
 // Set to false to go back to the old pop-up login window.
 const USE_LOGIN_PAGE = false;
+
+// Screenshot / copy deterrents on the wallpaper preview. A website can never fully
+// block screenshots; this makes casual copying harder and traceable. Set false to turn off.
+const SCREENSHOT_DETERRENTS = true;
+
+// Faint repeating "FUSION - name" pattern drawn over the preview (not on downloads)
+const watermarkBg = (label: string) => {
+  const safe = label.replace(/[<>&"'#%]/g, "").slice(0, 24);
+  const svg = `<svg xmlns='http://www.w3.org/2000/svg' width='180' height='120'><text x='90' y='64' text-anchor='middle' font-family='Arial' font-size='15' font-weight='700' fill='white' transform='rotate(-24 90 60)'>FUSION - ${safe}</text></svg>`;
+  return `url("data:image/svg+xml;utf8,${encodeURIComponent(svg)}")`;
+};
 
 interface PendingIntent {
   type: "download" | "save" | "saved_tab" | "profile_tab";
@@ -323,6 +335,37 @@ export default function FusionWallpapersApp() {
   const [editingWallpaper, setEditingWallpaper] = useState<boolean>(false);
 
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
+
+  const [screenGuard, setScreenGuard] = useState<boolean>(false);
+
+  // Hide the picture when the page loses focus / is switched away / PrintScreen is pressed
+  useEffect(() => {
+    if (!SCREENSHOT_DETERRENTS || !selectedWallpaper) return;
+    const hide = () => setScreenGuard(true);
+    const show = () => setScreenGuard(false);
+    const onVis = () => (document.hidden ? hide() : show());
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "PrintScreen") {
+        hide();
+        navigator.clipboard?.writeText("").catch(() => {});
+        setTimeout(show, 1500);
+      }
+      if ((e.ctrlKey || e.metaKey) && ["s", "p"].includes(e.key.toLowerCase())) e.preventDefault();
+    };
+    window.addEventListener("blur", hide);
+    window.addEventListener("focus", show);
+    window.addEventListener("pointerdown", show);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("focus", show);
+      window.removeEventListener("pointerdown", show);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("keydown", onKey);
+      setScreenGuard(false);
+    };
+  }, [selectedWallpaper]);
 
   const isAdmin = !!user?.isAdmin; // decided by the server (ADMIN_EMAILS)
   const isLight = theme === "light";
@@ -972,6 +1015,8 @@ export default function FusionWallpapersApp() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
+
+      db.trackDownload(wallpaper.id); // counts for the admin dashboard
 
       setDownloadStatus({
         id: wallpaper.id,
@@ -1658,6 +1703,18 @@ export default function FusionWallpapersApp() {
           />
           <div className="absolute inset-0 z-10 bg-transparent" onContextMenu={(e) => e.preventDefault()} />
 
+          {SCREENSHOT_DETERRENTS && (
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 z-10"
+              style={{
+                backgroundImage: watermarkBg(user?.email?.split("@")[0] || "fusion"),
+                backgroundSize: "180px 120px",
+                opacity: 0.16,
+              }}
+            />
+          )}
+
           {slides && idx > 0 && (
             <button
               type="button"
@@ -2252,6 +2309,20 @@ export default function FusionWallpapersApp() {
 
                 {renderOfficialSocialsSection()}
               </div>
+
+              {isAdmin && (
+                <div className="max-w-md md:max-w-3xl mx-auto">
+                  <GlassButton
+                    typeShape="pill"
+                    activeWhite={true}
+                    className="w-full h-12 text-sm font-bold gap-2"
+                    onClick={() => router.push("/admin")}
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Admin dashboard</span>
+                  </GlassButton>
+                </div>
+              )}
 
               <div className="space-y-3 pt-1">
                 <div className="flex items-baseline justify-between px-0.5">
@@ -2890,6 +2961,23 @@ export default function FusionWallpapersApp() {
                 className="absolute inset-0 z-10 bg-transparent"
                 onContextMenu={(e) => e.preventDefault()}
               />
+
+              {SCREENSHOT_DETERRENTS && (
+                <div
+                  aria-hidden
+                  className="pointer-events-none absolute inset-0 z-10"
+                  style={{
+                    backgroundImage: watermarkBg(user?.email?.split("@")[0] || "fusion"),
+                    backgroundSize: "180px 120px",
+                    opacity: 0.16,
+                  }}
+                />
+              )}
+              {SCREENSHOT_DETERRENTS && screenGuard && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 text-xs font-semibold text-white/80 backdrop-blur-xl">
+                  Protected view
+                </div>
+              )}
 
               {detailIsTall && (
                 <button
