@@ -2,6 +2,7 @@
  * lib/server/neon.ts  -  server-only helpers for the Neon database.
  * Used by the API routes in app/api/*. Never import this from a client component.
  */
+import { headers } from "next/headers";
 import { neon } from "@neondatabase/serverless";
 import { auth } from "@/lib/auth/server";
 
@@ -20,6 +21,19 @@ export interface SessionUser {
 
 /** Who is logged in right now (from the Neon Auth cookie). Null if nobody. */
 export async function getSessionUser(): Promise<SessionUser | null> {
+  // Safety: if the request comes from ANOTHER website, never treat it as logged in.
+  // (Stops other sites from using a visitor's login cookie to act on their behalf.)
+  const h = await headers();
+  const origin = h.get("origin");
+  const host = h.get("x-forwarded-host") || h.get("host");
+  if (origin) {
+    try {
+      if (new URL(origin).host !== host) return null;
+    } catch {
+      return null;
+    }
+  }
+
   const { data: session } = await auth.getSession();
   const u = session?.user;
   if (!u?.id) return null;
@@ -32,7 +46,8 @@ export async function getSessionUser(): Promise<SessionUser | null> {
     id: String(u.id),
     email,
     name: String(u.name || ""),
-    isAdmin: !!email && admins.includes(email),
+    // admin = on the ADMIN_EMAILS list AND the email is verified
+    isAdmin: !!email && admins.includes(email) && (u as any).emailVerified !== false,
   };
 }
 
