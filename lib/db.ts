@@ -57,6 +57,47 @@ export interface Profile {
 
 export type OAuthProvider = "google" | "apple";
 
+export interface AdminWallpaperRow {
+  id: string;
+  title: string;
+  image_url: string;
+  tags: string[] | null;
+  category: string | null;
+  created_at: string;
+  total_downloads: number;
+  period_downloads: number;
+  saves: number;
+}
+
+export interface DayPoint {
+  day: string;
+  n: number;
+}
+
+export interface AdminStats {
+  days: number;
+  totals: {
+    wallpapers: number;
+    users: number;
+    usersPeriod: number;
+    usersPrev: number;
+    downloadsAll: number;
+    downloadsPeriod: number;
+    downloadsPrev: number;
+    uniqueDownloaders: number;
+    savesAll: number;
+    savesPeriod: number;
+    savesPrev: number;
+  };
+  series: { downloads: DayPoint[]; saves: DayPoint[]; signups: DayPoint[] };
+  topDownloaded: AdminWallpaperRow[];
+  topSaved: AdminWallpaperRow[];
+  attention: AdminWallpaperRow[];
+  recent: AdminWallpaperRow[];
+  categories: { category: string; wallpapers: number; downloads: number; saves: number }[];
+  devices: { phone: number; pc: number; unknown: number };
+}
+
 export type AuthChange = {
   type: "PASSWORD_RECOVERY" | "CHANGED";
   user: AppUser | null;
@@ -342,6 +383,20 @@ async function deleteWallpaper(w: Pick<Wallpaper, "id" | "image_url" | "storage_
   await api(`/api/wallpapers/${encodeURIComponent(w.id)}`, { method: "DELETE" });
 }
 
+/** Counts one download (logged-in users only; repeats within 10 minutes are ignored). */
+async function trackDownload(wallpaperId: string): Promise<void> {
+  try {
+    await api("/api/downloads", { method: "POST", body: JSON.stringify({ wallpaperId }) });
+  } catch {
+    /* never block a download because counting failed */
+  }
+}
+
+/** Admin only. */
+async function getAdminStats(days: number): Promise<AdminStats> {
+  return api<AdminStats>(`/api/admin/stats?days=${days}`, { cache: "no-store" });
+}
+
 /** Old Supabase storage is gone, so downloads use the image link instead. */
 async function downloadStoredFile(_storagePath: string): Promise<Blob | null> {
   return null;
@@ -383,4 +438,7 @@ export const db = {
   updateWallpaperUrl,
   deleteWallpaper,
   downloadStoredFile,
+  // stats
+  trackDownload,
+  getAdminStats,
 };
