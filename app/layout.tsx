@@ -11,7 +11,11 @@ export const metadata: Metadata = {
     "Discover and download high-quality anime, gaming, and aesthetic wallpapers for your phone and PC.",
   applicationName: "Fusion Wallpapers",
   manifest: "/manifest.json",
-  icons: { icon: "/logo.webp", shortcut: "/logo.webp", apple: "/logo.webp" },
+  icons: { 
+    icon: "/logo.webp", 
+    shortcut: "/logo.webp", 
+    apple: "/app-icon/apple-touch-icon.png" // <-- Updated here
+  },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Fusion Wallpapers" },
   openGraph: {
     title: "Fusion Wallpapers - Find Your Perfect Anime Wallpaper",
@@ -45,7 +49,8 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/logo.webp" type="image/webp" />
-        <link rel="apple-touch-icon" href="/logo.webp" />
+        {/* Updated the apple-touch-icon href below */}
+        <link rel="apple-touch-icon" href="/app-icon/apple-touch-icon.png" /> 
       </head>
       <body className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative">
         {children}
