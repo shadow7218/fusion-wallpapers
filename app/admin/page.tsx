@@ -52,7 +52,9 @@ function Kpi({
   );
 }
 
-function AreaChart({ data, color, id }: { data: DayPoint[]; color: string; id: string }) {
+function AreaChart({ data, color, id, unit }: { data: DayPoint[]; color: string; id: string; unit: string }) {
+  const [active, setActive] = useState<number | null>(null);
+
   if (data.length === 0) {
     return <p className="ad-muted py-8 text-center text-xs">No data yet.</p>;
   }
@@ -64,32 +66,75 @@ function AreaChart({ data, color, id }: { data: DayPoint[]; color: string; id: s
   const area = `${line} L${pts[pts.length - 1][0].toFixed(1)},${H - P} L${pts[0][0].toFixed(1)},${H - P} Z`;
   const peakIdx = data.reduce((best, d, i) => (d.n > data[best].n ? i : best), 0);
   const total = data.reduce((s, d) => s + d.n, 0);
+
+  // finger / mouse position -> nearest day
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    const x = ((e.clientX - r.left) / r.width) * W;
+    const i = step === 0 ? 0 : Math.round((x - P) / step);
+    setActive(Math.min(data.length - 1, Math.max(0, i)));
+  };
+
+  const shown = active ?? peakIdx;
+  const sp = pts[shown];
+  const tipLeft = Math.min(86, Math.max(14, (sp[0] / W) * 100));
+
   return (
     <div>
-      <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="chart">
-        <defs>
-          <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-            <stop offset="100%" stopColor={color} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[0.25, 0.5, 0.75].map((g) => (
-          <line key={g} x1={P} x2={W - P} y1={TOP + (H - P - TOP) * g} y2={TOP + (H - P - TOP) * g} stroke="currentColor" opacity="0.08" />
-        ))}
-        <path d={area} fill={`url(#${id})`} />
-        <path d={line} fill="none" stroke={color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
-        {data[peakIdx].n > 0 && <circle cx={pts[peakIdx][0]} cy={pts[peakIdx][1]} r="3.5" fill={color} />}
-      </svg>
-      <div className="ad-muted mt-1 flex items-center justify-between text-[10px]">
-        <span>{niceDay(data[0].day)}</span>
-        <span>
-          {total} total · peak {data[peakIdx].n} on {niceDay(data[peakIdx].day)}
+      <div
+        className="relative select-none"
+        style={{ touchAction: "pan-y" }}
+        onPointerDown={pick}
+        onPointerMove={(e) => {
+          if (e.pointerType === "mouse" || e.buttons > 0) pick(e);
+        }}
+        onPointerLeave={(e) => {
+          if (e.pointerType === "mouse") setActive(null);
+        }}
+      >
+        {active !== null && (
+          <div
+            className="ad-tip pointer-events-none absolute z-10"
+            style={{ left: `${tipLeft}%`, top: 0, transform: "translateX(-50%)" }}
+          >
+            <span className="block text-[10px] opacity-70">{niceDay(data[active].day)}</span>
+            <span className="block text-sm font-extrabold leading-tight">
+              {data[active].n} {unit}
+            </span>
+          </div>
+        )}
+        <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="chart">
+          <defs>
+            <linearGradient id={id} x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.35" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          {[0.25, 0.5, 0.75].map((g) => (
+            <line key={g} x1={P} x2={W - P} y1={TOP + (H - P - TOP) * g} y2={TOP + (H - P - TOP) * g} stroke="currentColor" opacity="0.08" />
+          ))}
+          <path d={area} fill={`url(#${id})`} />
+          <path d={line} fill="none" stroke={color} strokeWidth="2.2" strokeLinejoin="round" strokeLinecap="round" />
+          {active !== null && (
+            <line x1={sp[0]} x2={sp[0]} y1={TOP - 4} y2={H - P} stroke={color} strokeWidth="1" strokeDasharray="3 3" opacity="0.8" />
+          )}
+          {(active !== null || data[peakIdx].n > 0) && (
+            <circle cx={sp[0]} cy={sp[1]} r={active !== null ? 5 : 3.5} fill={color} stroke="var(--ad-card)" strokeWidth="2" />
+          )}
+        </svg>
+      </div>
+      <div className="ad-muted mt-1 flex items-center justify-between gap-2 text-[10px]">
+        <span className="shrink-0">{niceDay(data[0].day)}</span>
+        <span className="min-w-0 truncate text-center">
+          {active !== null ? "Touch and drag to explore" : `${total} total · peak ${data[peakIdx].n} on ${niceDay(data[peakIdx].day)} · touch the graph`}
         </span>
-        <span>{niceDay(data[data.length - 1].day)}</span>
+        <span className="shrink-0">{niceDay(data[data.length - 1].day)}</span>
       </div>
     </div>
   );
 }
+
+const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 function WallpaperList({
   rows, metric, empty,
@@ -107,8 +152,9 @@ function WallpaperList({
               <img src={img(r, 120)} alt="" className="h-14 w-10 shrink-0 rounded-lg object-cover" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-semibold">{r.title}</p>
-                <p className="ad-muted truncate text-[11px]">
-                  {r.category || "uncategorized"} · {r.total_downloads} downloads · {r.saves} saves
+                <p className="ad-muted truncate text-[11px] capitalize">{(r.category || "uncategorized").replace(/-/g, " ")}</p>
+                <p className="ad-muted text-[11px] leading-snug">
+                  {plural(r.total_downloads, "download")} · {plural(r.saves, "save")}
                   {metric === "age" && ` · added ${niceDay(r.created_at.slice(0, 10))}`}
                 </p>
                 {metric !== "age" && (
@@ -189,9 +235,9 @@ export default function AdminPage() {
   const devTotal = stats ? Math.max(1, stats.devices.phone + stats.devices.pc + stats.devices.unknown) : 1;
 
   return (
-    <div className="ad-root min-h-screen">
+    <div className="ad-root min-h-screen overflow-x-hidden">
       <style>{css}</style>
-      <div className="mx-auto max-w-5xl px-3 pb-16 pt-4 md:px-4">
+      <div className="mx-auto w-full max-w-5xl px-3 pb-16 pt-4 md:px-4">
         {/* top bar */}
         <div className="flex items-center justify-between gap-2">
           <button type="button" aria-label="Back" onClick={() => router.push("/")} className="ad-circle">
@@ -232,7 +278,7 @@ export default function AdminPage() {
         {stats && t && (
           <div className={`mt-4 space-y-4 transition-opacity ${loading ? "opacity-60" : ""}`}>
             {/* KPIs */}
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
+            <div className="ad-grid grid grid-cols-2 gap-3 md:grid-cols-4">
               <Kpi icon={<Download className="h-4 w-4" />} label="Downloads" value={t.downloadsPeriod} sub={`${fmt(t.downloadsAll)} all time`} cur={t.downloadsPeriod} prev={t.downloadsPrev} />
               <Kpi icon={<Bookmark className="h-4 w-4" />} label="Saves" value={t.savesPeriod} sub={`${fmt(t.savesAll)} all time`} cur={t.savesPeriod} prev={t.savesPrev} />
               <Kpi icon={<Users className="h-4 w-4" />} label="New users" value={t.usersPeriod} sub={`${fmt(t.users)} total`} cur={t.usersPeriod} prev={t.usersPrev} />
@@ -240,23 +286,23 @@ export default function AdminPage() {
             </div>
 
             {/* charts */}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="ad-grid grid gap-3 md:grid-cols-2">
               <div className="ad-card p-4">
                 <h2 className="mb-2 text-sm font-extrabold">Downloads per day</h2>
-                <AreaChart data={stats.series.downloads} color="#6d8bff" id="g-dl" />
+                <AreaChart data={stats.series.downloads} color="#6d8bff" id="g-dl" unit="downloads" />
               </div>
               <div className="ad-card p-4">
                 <h2 className="mb-2 text-sm font-extrabold">Saves per day</h2>
-                <AreaChart data={stats.series.saves} color="#ff7aa8" id="g-sv" />
+                <AreaChart data={stats.series.saves} color="#ff7aa8" id="g-sv" unit="saves" />
               </div>
             </div>
             <div className="ad-card p-4">
               <h2 className="mb-2 text-sm font-extrabold">New users per day</h2>
-              <AreaChart data={stats.series.signups} color="#3fd6a0" id="g-us" />
+              <AreaChart data={stats.series.signups} color="#3fd6a0" id="g-us" unit="new users" />
             </div>
 
             {/* performance */}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="ad-grid grid gap-3 md:grid-cols-2">
               <div className="ad-card p-4">
                 <h2 className="mb-3 text-sm font-extrabold">Top downloaded ({days} days)</h2>
                 <WallpaperList rows={stats.topDownloaded.filter((r) => r.period_downloads > 0)} metric="period" empty="No downloads in this period yet." />
@@ -268,18 +314,19 @@ export default function AdminPage() {
             </div>
 
             {/* categories + devices */}
-            <div className="grid gap-3 md:grid-cols-2">
+            <div className="ad-grid grid gap-3 md:grid-cols-2">
               <div className="ad-card p-4">
                 <h2 className="mb-3 text-sm font-extrabold">Category performance</h2>
                 <ul className="space-y-3">
                   {stats.categories.map((c) => (
                     <li key={c.category}>
-                      <div className="flex items-baseline justify-between text-sm">
-                        <span className="truncate font-semibold capitalize">{c.category.replace(/-/g, " ")}</span>
-                        <span className="ad-muted text-[11px]">
-                          {c.wallpapers} wallpapers · {c.downloads} downloads · {c.saves} saves
-                        </span>
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="min-w-0 truncate text-sm font-semibold capitalize">{c.category.replace(/-/g, " ")}</span>
+                        <span className="shrink-0 text-sm font-extrabold">{c.downloads + c.saves}</span>
                       </div>
+                      <p className="ad-muted mt-0.5 text-[11px] leading-snug">
+                        {plural(c.wallpapers, "wallpaper")} · {plural(c.downloads, "download")} · {plural(c.saves, "save")}
+                      </p>
                       <div className="ad-bar mt-1.5">
                         <span style={{ width: `${Math.max(3, ((c.downloads + c.saves) / maxCat) * 100)}%` }} />
                       </div>
@@ -331,7 +378,10 @@ const css = `
   background:var(--ad-bg);color:var(--ad-text)}
 .theme-light .ad-root{--ad-bg:#E9F0F9;--ad-card:#ffffff;--ad-line:rgba(14,47,118,.16);--ad-text:#0E2F76;--ad-muted:rgba(14,47,118,.62);
   --ad-up:#0f9d6b;--ad-down:#c4283a;--ad-track:rgba(14,47,118,.12);--ad-fill:#0E2F76}
-.ad-card{background:var(--ad-card);border:1px solid var(--ad-line);border-radius:22px}
+.ad-card{background:var(--ad-card);border:1px solid var(--ad-line);border-radius:22px;min-width:0;overflow:hidden}
+.ad-grid > *{min-width:0}
+.ad-tip{padding:6px 10px;border-radius:12px;background:var(--ad-text);color:var(--ad-bg);white-space:nowrap;
+  box-shadow:0 6px 18px rgba(0,0,0,.35)}
 .theme-light .ad-card{box-shadow:0 1px 2px rgba(14,47,118,.08),0 8px 22px rgba(14,47,118,.10)}
 .ad-muted{color:var(--ad-muted)}
 .ad-up{color:var(--ad-up)}
