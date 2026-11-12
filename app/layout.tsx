@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { ogImg } from "@/lib/img";
 import CookieConsent from "@/components/CookieConsent";
+import LoadingScreen from "@/components/LoadingScreen"; // <-- Added import
 import "./globals.css";
 import "./liquid-glass.css";
 
@@ -14,7 +15,7 @@ export const metadata: Metadata = {
   icons: { 
     icon: "/logo.webp", 
     shortcut: "/logo.webp", 
-    apple: "/app-icon/apple-touch-icon.png" // <-- Updated here
+    apple: "/app-icon/apple-touch-icon.png"
   },
   appleWebApp: { capable: true, statusBarStyle: "black-translucent", title: "Fusion Wallpapers" },
   openGraph: {
@@ -49,10 +50,11 @@ export default function RootLayout({
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="icon" href="/logo.webp" type="image/webp" />
-        {/* Updated the apple-touch-icon href below */}
         <link rel="apple-touch-icon" href="/app-icon/apple-touch-icon.png" /> 
       </head>
       <body className="bg-[#000000] text-[#E5E4E2] antialiased min-h-screen relative">
+        {/* Added LoadingScreen here */}
+        <LoadingScreen /> 
         {children}
         <CookieConsent />
       </body>
