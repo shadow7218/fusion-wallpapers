@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 const TEXT_TOP = "Fusion";
 const TEXT_BOTTOM = "Wallpaper";
 const LOGO_ANIMATION = true; // soft glow + gentle "breathing" behind the logo (false = logo stays still)
-const ONLY_IN_INSTALLED_APP = false; // true = show only when opened from the home screen, not in the browser
+const ONLY_IN_INSTALLED_APP = true; // true = show only when opened from the home screen, not in the browser
 const LOGO_SRC = "/app-icon/icon-512.png?v=2"; // same file the phone uses for its own loading screen
 /* ------------------------------------------------ */
 
