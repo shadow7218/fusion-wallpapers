@@ -5,9 +5,9 @@ import { useEffect, useState } from "react";
 /* ---------------- easy settings ---------------- */
 const TEXT_TOP = "Fusion";
 const TEXT_BOTTOM = "Wallpaper";
-const LOGO_ANIMATION = true; // soft glow + gentle "breathing" behind the logo (false = logo stays still)
-const ONLY_IN_INSTALLED_APP = true; // true = show only when opened from the home screen, not in the browser
-const LOGO_SRC = "/app-icon/icon-512.png?v=2"; // same file the phone uses for its own loading screen
+const LOGO_ANIMATION = true; // Kept true so the logo still breathes
+const ONLY_IN_INSTALLED_APP = true; // true = show only when opened from the home screen
+const LOGO_SRC = "/app-icon/icon-512.png?v=2"; 
 /* ------------------------------------------------ */
 
 export default function LoadingScreen() {
@@ -15,8 +15,8 @@ export default function LoadingScreen() {
 
   useEffect(() => {
     const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    const MIN = reduced ? 700 : 2000; // long enough for the text animation to finish
-    const MAX = 5000; // never block the site longer than this
+    const MIN = reduced ? 700 : 2000; 
+    const MAX = 5000; 
     let loaded = document.readyState === "complete";
     let minDone = false;
     let left = false;
@@ -59,13 +59,7 @@ export default function LoadingScreen() {
     <div className={`fs-overlay ${phase === "leave" ? "fs-leave" : ""}`} aria-hidden="true">
       <style>{css(ONLY_IN_INSTALLED_APP)}</style>
 
-      {LOGO_ANIMATION && (
-        <div className="fs-glow">
-          <span className="g1" />
-          <span className="g2" />
-          <span className="g3" />
-        </div>
-      )}
+      {/* The colored glow HTML was removed from here */}
 
       <img
         src={LOGO_SRC}
@@ -107,17 +101,6 @@ ${
 .fs-breathe{animation:fs-breathe 3.4s ease-in-out .6s infinite}
 @keyframes fs-breathe{0%,100%{transform:scale(1)}50%{transform:scale(1.04)}}
 
-/* soft coloured glow behind the logo (same colours as the logo) */
-.fs-glow{position:absolute;left:50%;top:50%;width:var(--fs-size);height:var(--fs-size);
-  transform:translate(-50%,-50%);z-index:1;pointer-events:none}
-.fs-glow span{position:absolute;border-radius:9999px;filter:blur(38px);opacity:0;will-change:opacity,transform;
-  animation:fs-glow-in 1.2s ease-out .15s forwards,fs-glow-pulse 3.2s ease-in-out 1.35s infinite}
-.fs-glow .g1{left:6%;top:30%;width:46%;height:46%;background:#ff3d6e}
-.fs-glow .g2{left:46%;top:2%;width:44%;height:44%;background:#2b5bff;animation-delay:.3s,1.5s}
-.fs-glow .g3{left:42%;top:46%;width:46%;height:46%;background:#18f0d6;animation-delay:.45s,1.65s}
-@keyframes fs-glow-in{from{opacity:0}to{opacity:.38}}
-@keyframes fs-glow-pulse{0%,100%{opacity:.38;transform:scale(1)}50%{opacity:.58;transform:scale(1.1)}}
-
 /* text under the logo: blur -> sharp fade-in, then one light sweep */
 .fs-text{position:absolute;left:0;right:0;top:calc(50% + var(--fs-size) * .365 + 26px);
   z-index:3;text-align:center}
@@ -137,8 +120,7 @@ ${
 @keyframes fs-sweep{from{background-position:100% 0}to{background-position:0% 0}}
 
 @media (prefers-reduced-motion:reduce){
-  .fs-breathe,.fs-glow span,.fs-sweep{animation:none!important}
-  .fs-glow span{opacity:.3}
+  .fs-breathe,.fs-sweep{animation:none!important}
   .fs-line{animation:fs-fade .4s ease forwards!important;filter:none;transform:none}
   @keyframes fs-fade{to{opacity:1}}
 }
