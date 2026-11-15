@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { db, type AppUser } from "@/lib/db";
 import { AvatarBadge, AVATARS } from "@/components/avatars";
+import GlassControls from "@/components/GlassControls";
 
 const AVATAR_IDS = ["ember", "moon", "bolt", "blade", "ghost", "crown", "skull", "star", "heart", "rocket"];
 
@@ -90,6 +91,19 @@ export default function SettingsPage() {
     setTheme(t);
     applyTheme(t);
     setHaptics(localStorage.getItem("fusion-haptics") !== "off");
+
+    // open straight away from the copy kept on this device, then refresh quietly
+    const cachedUser = db.peekUser();
+    if (cachedUser) {
+      const cachedProfile = db.peekProfile();
+      const cachedName = cachedProfile?.display_name || cachedUser.email?.split("@")[0] || "Shadow";
+      setUser(cachedUser);
+      setEmailNotifs(cachedUser.emailNotifications);
+      setDisplayName(cachedName);
+      setNameInput(cachedName);
+      setSavedCount(db.peekSavedCount() ?? 0);
+      setReady(true);
+    }
 
     (async () => {
       const u = await db.getCurrentUser();
@@ -383,6 +397,7 @@ export default function SettingsPage() {
               <div className="s-item">
                 <Row icon={Waves} label="Haptic Feedback" right={<Switch on={haptics} onChange={toggleHaptics} label="Haptic feedback" />} />
               </div>
+              <GlassControls Switch={Switch} />
             </div>
 
             {/* Danger zone */}
