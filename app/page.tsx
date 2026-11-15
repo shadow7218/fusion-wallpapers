@@ -37,6 +37,7 @@ import {
   Flame,
   Moon,
   Sun,
+  LayoutDashboard,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import PasswordInput from "@/components/PasswordInput";
@@ -64,6 +65,13 @@ interface UserProfile {
   id: string;
   display_name: string;
 }
+
+// Set to false to go back to the old pop-up login window.
+const USE_LOGIN_PAGE = false;
+
+// Screenshot / copy deterrents on the wallpaper preview. A website can never fully
+// block screenshots; this makes casual copying harder and traceable. Set false to turn off.
+const SCREENSHOT_DETERRENTS = true;
 
 interface PendingIntent {
   type: "download" | "save" | "saved_tab" | "profile_tab";
@@ -321,7 +329,44 @@ export default function FusionWallpapersApp() {
 
   const [pcHeroIndex, setPcHeroIndex] = useState<number>(0);
 
+  const [screenGuard, setScreenGuard] = useState<boolean>(false);
+
+  // Hide the picture when the page loses focus / is switched away / PrintScreen is pressed
+  useEffect(() => {
+    if (!SCREENSHOT_DETERRENTS || !selectedWallpaper) return;
+    const hide = () => setScreenGuard(true);
+    const show = () => setScreenGuard(false);
+    const onVis = () => (document.hidden ? hide() : show());
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "PrintScreen") {
+        hide();
+        navigator.clipboard?.writeText("").catch(() => {});
+        setTimeout(show, 1500);
+      }
+      if ((e.ctrlKey || e.metaKey) && ["s", "p"].includes(e.key.toLowerCase())) e.preventDefault();
+    };
+    window.addEventListener("blur", hide);
+    window.addEventListener("focus", show);
+    window.addEventListener("pointerdown", show);
+    document.addEventListener("visibilitychange", onVis);
+    window.addEventListener("keydown", onKey);
+    return () => {
+      window.removeEventListener("blur", hide);
+      window.removeEventListener("focus", show);
+      window.removeEventListener("pointerdown", show);
+      document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("keydown", onKey);
+      setScreenGuard(false);
+    };
+  }, [selectedWallpaper]);
+
   const isAdmin = !!user?.isAdmin; // decided by the server (ADMIN_EMAILS)
+
+  // Warm up the Settings page in the background so it opens instantly
+  useEffect(() => {
+    if (user) router.prefetch("/settings");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
   const isLight = theme === "light";
 
   useEffect(() => {
@@ -635,6 +680,17 @@ export default function FusionWallpapersApp() {
     intent: PendingIntent,
     initialStep: AuthStep = "SIGN_IN"
   ) => {
+    if (USE_LOGIN_PAGE) {
+      // remember what the visitor wanted, then open the full login page
+      try {
+        sessionStorage.setItem(
+          "fusion-after-login",
+          JSON.stringify({ type: intent.type, wallpaperId: intent.wallpaper?.id ?? null })
+        );
+      } catch {}
+      router.push("/login");
+      return;
+    }
     setAuthReason(reason);
     setPendingIntent(intent);
     setAuthStep(initialStep);
@@ -659,6 +715,30 @@ export default function FusionWallpapersApp() {
       setActiveTab("profile");
     }
   };
+
+  useEffect(() => {
+    if (!user || loading) return;
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem("fusion-after-login");
+      if (raw) sessionStorage.removeItem("fusion-after-login");
+    } catch {}
+    if (!raw) return;
+    try {
+      const p = JSON.parse(raw) as { type: PendingIntent["type"]; wallpaperId: string | null };
+      const w = p.wallpaperId ? wallpapers.find((x) => x.id === p.wallpaperId) : undefined;
+      if (p.type === "saved_tab") setActiveTab("saved");
+      else if (p.type === "profile_tab") setActiveTab("profile");
+      else if (w && p.type === "save") {
+        setSelectedWallpaper(w);
+        toggleSaveWallpaper(null, w, user);
+      } else if (w && p.type === "download") {
+        setSelectedWallpaper(w);
+        triggerDirectDownload(w, user);
+      }
+    } catch {}
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, loading, wallpapers]);
 
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
@@ -934,6 +1014,8 @@ export default function FusionWallpapersApp() {
       link.click();
       document.body.removeChild(link);
       window.URL.revokeObjectURL(blobUrl);
+
+      db.trackDownload(wallpaper.id); // counts for the admin dashboard
 
       setDownloadStatus({
         id: wallpaper.id,
@@ -2215,6 +2297,20 @@ export default function FusionWallpapersApp() {
                 {renderOfficialSocialsSection()}
               </div>
 
+              {isAdmin && (
+                <div className="max-w-md md:max-w-3xl mx-auto">
+                  <GlassButton
+                    typeShape="pill"
+                    activeWhite={true}
+                    className="w-full h-12 text-sm font-bold gap-2"
+                    onClick={() => router.push("/admin")}
+                  >
+                    <LayoutDashboard className="h-4 w-4" />
+                    <span>Admin dashboard</span>
+                  </GlassButton>
+                </div>
+              )}
+
               <div className="space-y-3 pt-1">
                 <div className="flex items-baseline justify-between px-0.5">
                   <h3
@@ -2325,7 +2421,14 @@ export default function FusionWallpapersApp() {
               </div>
 
               <div className="grid grid-cols-2 gap-2.5">
-                {animeCategories.map((cat) => {
+                {[...animeCategories]
+                  .map((cat, order) => ({
+                    cat,
+                    order,
+                    count: wallpapers.filter((w) => getWallpaperCategory(w) === cat.id).length,
+                  }))
+                  .sort((a, b) => b.count - a.count || a.order - b.order)
+                  .map(({ cat }) => {
                   const catWallpapers = wallpapers.filter(
                     (w) => getWallpaperCategory(w) === cat.id
                   );
@@ -2846,6 +2949,12 @@ export default function FusionWallpapersApp() {
                 onContextMenu={(e) => e.preventDefault()}
               />
 
+              {SCREENSHOT_DETERRENTS && screenGuard && (
+                <div className="absolute inset-0 z-30 flex items-center justify-center bg-black/90 text-xs font-semibold text-white/80 backdrop-blur-xl">
+                  Protected view
+                </div>
+              )}
+
               {detailIsTall && (
                 <button
                   type="button"
@@ -2853,19 +2962,18 @@ export default function FusionWallpapersApp() {
                   onPointerDown={(e) => e.stopPropagation()}
                   onClick={() => setIsExpanded(!isExpanded)}
                   className="fusion-bounce absolute left-3 top-3 z-20 flex h-10 w-10 items-center justify-center overflow-hidden rounded-full border border-white/35 bg-white/[0.035] text-white shadow-[inset_0_1px_1px_rgba(255,255,255,0.65),inset_0_-1px_2px_rgba(255,255,255,0.12),0_2px_8px_rgba(0,0,0,0.12)] transition-transform duration-200 active:scale-90"
-
                   style={{
-                  backdropFilter: "blur(2px) saturate(110%)",
-                  WebkitBackdropFilter: "blur(2px) saturate(110%)",
-            }}
-           >
-                 {isExpanded ? (
-                 <Minimize2 className="h-5 w-5" strokeWidth={2.2} />
+                    backdropFilter: "blur(2px) saturate(110%)",
+                    WebkitBackdropFilter: "blur(2px) saturate(110%)",
+                  }}
+                >
+                  {isExpanded ? (
+                    <Minimize2 className="h-5 w-5" strokeWidth={2.2} />
                   ) : (
-                <Maximize2 className="h-5 w-5" strokeWidth={2.2} />
-            )}
-               </button>
-            )}
+                    <Maximize2 className="h-5 w-5" strokeWidth={2.2} />
+                  )}
+                </button>
+              )}
 
               {detailSlides && (
                 <>
