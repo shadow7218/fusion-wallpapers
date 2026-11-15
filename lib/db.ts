@@ -165,10 +165,43 @@ const emit = (user: AppUser | null) => listeners.forEach((cb) => cb({ type: "CHA
 type MeResponse = { user: AppUser | null; profile?: Profile | null };
 let lastProfile: Profile | null = null;
 
+/* A copy of the account is kept on the device so Settings can open instantly
+   (it is refreshed in the background every time). */
+const ME_CACHE_KEY = "fusion-me-v1";
+interface MeCache {
+  user: AppUser | null;
+  profile: Profile | null;
+  savedCount: number | null;
+}
+const readMeCache = (): MeCache | null => {
+  try {
+    const raw = localStorage.getItem(ME_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as MeCache) : null;
+  } catch {
+    return null;
+  }
+};
+const writeMeCache = (patch: Partial<MeCache>) => {
+  try {
+    const cur = readMeCache() || { user: null, profile: null, savedCount: null };
+    localStorage.setItem(ME_CACHE_KEY, JSON.stringify({ ...cur, ...patch }));
+  } catch {}
+};
+const clearMeCache = () => {
+  try {
+    localStorage.removeItem(ME_CACHE_KEY);
+  } catch {}
+};
+const peekUser = (): AppUser | null => readMeCache()?.user ?? null;
+const peekProfile = (): Profile | null => readMeCache()?.profile ?? null;
+const peekSavedCount = (): number | null => readMeCache()?.savedCount ?? null;
+
 async function loadMe(): Promise<AppUser | null> {
   try {
     const r = await api<MeResponse>("/api/me");
     lastProfile = r.profile ?? null;
+    if (r.user) writeMeCache({ user: r.user, profile: r.profile ?? null });
+    else clearMeCache();
     return r.user;
   } catch {
     return null;
@@ -267,6 +300,7 @@ async function signOut(): Promise<void> {
     await ac.signOut();
   } finally {
     lastProfile = null;
+    clearMeCache();
     emit(null);
   }
 }
@@ -314,7 +348,9 @@ async function listSavedIds(_userId: string): Promise<string[] | null> {
 }
 
 async function countSaved(userId: string): Promise<number> {
-  return (await listSavedIds(userId))?.length ?? 0;
+  const n = (await listSavedIds(userId))?.length ?? 0;
+  writeMeCache({ savedCount: n });
+  return n;
 }
 
 async function saveWallpaper(_userId: string, wallpaperId: string): Promise<void> {
@@ -405,6 +441,9 @@ async function downloadStoredFile(_storagePath: string): Promise<Blob | null> {
 export const db = {
   // logins
   getCurrentUser,
+  peekUser,
+  peekProfile,
+  peekSavedCount,
   onAuthChange,
   signInWithPassword,
   signUpWithPassword,
