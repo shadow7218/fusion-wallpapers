@@ -6,6 +6,7 @@ import {
   GLASS_DEFAULT,
   GLASS_PRESETS,
   loadGlass,
+  supportsRealGlass,
   updateGlass,
   type GlassSettings,
   type GlassTint,
@@ -50,9 +51,11 @@ export default function GlassControls({
   Switch: React.ComponentType<{ on: boolean; onChange: (v: boolean) => void; label: string }>;
 }) {
   const [s, setS] = useState<GlassSettings>(GLASS_DEFAULT);
+  const [realOk, setRealOk] = useState(false);
 
   useEffect(() => {
     setS(loadGlass());
+    setRealOk(supportsRealGlass());
   }, []);
 
   const set = (patch: Partial<GlassSettings>) => {
@@ -138,6 +141,37 @@ export default function GlassControls({
                 </button>
               ))}
             </div>
+          </div>
+
+          {/* real glass (beta) */}
+          <div className="rounded-2xl border p-3" style={{ borderColor: "var(--s-border)" }}>
+            <div className="flex items-center justify-between gap-4">
+              <div className="min-w-0">
+                <p className="text-[14px] font-semibold" style={{ color: "var(--s-text)" }}>
+                  Real glass <span className="ml-1 rounded-full px-2 py-0.5 text-[10px] font-bold" style={{ background: "var(--s-accent)", color: "#fff" }}>BETA</span>
+                </p>
+                <p className="text-xs" style={{ color: "var(--s-muted)" }}>
+                  {realOk
+                    ? "The bottom bar bends the picture behind it like a thick lens. Uses a little more battery."
+                    : "Needs Chrome, Edge or Samsung Internet. Your browser keeps the normal glass."}
+                </p>
+              </div>
+              <div className={realOk ? "" : "pointer-events-none opacity-40"}>
+                <Switch on={s.real && realOk} onChange={(v) => set({ real: v })} label="Real glass" />
+              </div>
+            </div>
+
+            {s.real && realOk && (
+              <div className="mt-4 space-y-4">
+                <Slider label="Refraction" value={s.refraction} min={0} max={100} unit="%" onChange={(v) => set({ refraction: v })} />
+                <Slider label="Rainbow" value={s.rainbow} min={0} max={100} unit="%" onChange={(v) => set({ rainbow: v })} />
+                <Slider label="Frost" value={s.frost} min={0} max={12} unit="px" onChange={(v) => set({ frost: v })} />
+                <Slider label="Light" value={s.light} min={0} max={100} unit="%" onChange={(v) => set({ light: v })} />
+                <p className="text-xs" style={{ color: "var(--s-muted)" }}>
+                  Look at the bottom bar to see the effect. It works best when a colourful wallpaper is behind the bar.
+                </p>
+              </div>
+            )}
           </div>
 
           {/* motion */}
