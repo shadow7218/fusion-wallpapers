@@ -3,6 +3,7 @@ import { ogImg } from "@/lib/img";
 import CookieConsent from "@/components/CookieConsent";
 import LoadingScreen from "@/components/LoadingScreen";
 import InstallPrompt from "@/components/InstallPrompt";
+import RealGlass from "@/components/RealGlass";
 import { GLASS_BOOT_SCRIPT } from "@/lib/glass";
 import "./globals.css";
 import "./liquid-glass.css";
@@ -61,6 +62,7 @@ export default function RootLayout({
         {children}
         <CookieConsent />
         <InstallPrompt />
+        <RealGlass />
       </body>
     </html>
   );
