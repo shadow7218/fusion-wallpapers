@@ -379,3 +379,96 @@ html[data-glass-motion="off"] .s-btn-ghost,
 html[data-glass-motion="off"] .fusion-bounce { transition: none !important; }
 html[data-glass-motion="off"] .fusion-stretch,
 html[data-glass-motion="off"] .fusion-icon-settle { animation: none !important; }
+
+
+/* =====================================================================
+   PREMIUM GLASS BUTTONS
+   A crisp 1px light edge (brighter on top), a soft light just under the top edge and a soft
+   shade at the bottom, so buttons read as thick frosted glass instead of a grey outline.
+   No masks or gradient borders, so it looks the same in every browser.
+   ===================================================================== */
+html { --btn-base: #17171b; }
+html[data-glass="on"] { --btn-base: rgba(var(--g-rgb, 20, 20, 24), var(--g-fill, 0.38)); }
+html.theme-light { --btn-base: #f4f7fc; }
+html.theme-light[data-glass="on"] { --btn-base: rgba(255, 255, 255, calc(var(--g-fill, 0.38) + 0.25)); }
+
+html .glass-button.glass-container:not(.glass-active-white),
+html .fusion-btn,
+html .s-circle,
+html .s-btn-ghost {
+  border: 0 !important;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.17) 0%, rgba(255, 255, 255, 0.05) 46%, rgba(255, 255, 255, 0.09) 100%),
+    var(--btn-base) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, calc(0.10 + var(--g-rim, 0.55) * 0.14)),
+    inset 0 1px 0 rgba(255, 255, 255, calc(0.28 + var(--g-rim, 0.55) * 0.4)),
+    inset 0 8px 10px -8px rgba(255, 255, 255, 0.2),
+    inset 0 -9px 12px -9px rgba(0, 0, 0, 0.45),
+    0 6px 16px rgba(0, 0, 0, 0.4) !important;
+}
+html .glass-button.glass-container:not(.glass-active-white)::before,
+html .fusion-btn::before,
+html .s-circle::before,
+html .s-btn-ghost::before { display: none !important; }
+
+html .glass-button.glass-container:not(.glass-active-white):hover,
+html .fusion-btn:hover,
+html .s-circle:hover,
+html .s-btn-ghost:hover {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.08) 46%, rgba(255, 255, 255, 0.12) 100%),
+    var(--btn-base) !important;
+}
+
+html.theme-light .glass-button.glass-container:not(.glass-active-white),
+html.theme-light .fusion-btn,
+html.theme-light .s-circle,
+html.theme-light .s-btn-ghost {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.4) 100%),
+    var(--btn-base) !important;
+  box-shadow:
+    inset 0 0 0 1px rgba(14, 47, 118, 0.15),
+    inset 0 1px 0 #ffffff,
+    inset 0 -8px 12px -8px rgba(14, 47, 118, 0.16),
+    0 4px 12px rgba(14, 47, 118, 0.14) !important;
+}
+html.theme-light .glass-button.glass-container:not(.glass-active-white):hover,
+html.theme-light .fusion-btn:hover,
+html.theme-light .s-circle:hover,
+html.theme-light .s-btn-ghost:hover {
+  background:
+    linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.55) 100%),
+    var(--btn-base) !important;
+}
+
+/* =====================================================================
+   REAL GLASS (beta): bottom bar only. The SVG filter #fusion-real-glass is drawn by
+   components/RealGlass.tsx and only exists in Chromium browsers that have it switched on.
+   ===================================================================== */
+html[data-glass="on"][data-glass-real="on"] .fusion-nav {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.015)),
+    rgba(var(--g-rgb, 20, 20, 24), 0.10) !important;
+  -webkit-backdrop-filter: url(#fusion-real-glass) blur(var(--g-frost, 2px)) saturate(var(--g-sat, 140%)) !important;
+  backdrop-filter: url(#fusion-real-glass) blur(var(--g-frost, 2px)) saturate(var(--g-sat, 140%)) !important;
+  border: 0 !important;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.5),
+    inset 0 0 0 1px rgba(255, 255, 255, calc(0.10 + var(--g-light, 0.6) * 0.2)),
+    inset 0 1.5px 0 rgba(255, 255, 255, calc(var(--g-light, 0.6) * 0.85)),
+    inset 0 -1px 0 rgba(255, 255, 255, calc(var(--g-light, 0.6) * 0.3)),
+    inset 0 14px 20px -14px rgba(255, 255, 255, calc(var(--g-light, 0.6) * 0.4)),
+    inset 0 -14px 20px -14px rgba(0, 0, 0, 0.5) !important;
+}
+html.theme-light[data-glass="on"][data-glass-real="on"] .fusion-nav {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0.15)),
+    rgba(255, 255, 255, 0.18) !important;
+  box-shadow:
+    0 10px 24px rgba(14, 47, 118, 0.2),
+    inset 0 0 0 1px rgba(14, 47, 118, 0.14),
+    inset 0 1.5px 0 #ffffff,
+    inset 0 -12px 18px -12px rgba(14, 47, 118, 0.2) !important;
+}
