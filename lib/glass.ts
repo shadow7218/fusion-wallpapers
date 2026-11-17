@@ -17,6 +17,12 @@ export interface GlassSettings {
   edge: number; // 0 - 100  brightness of the thin light edge
   tint: GlassTint;
   motion: boolean; // bouncy / stretchy animations
+  // "Real glass (beta)": the bottom bar bends the picture behind it like a thick lens
+  real: boolean;
+  refraction: number; // 0 - 100  how much the picture bends at the edges
+  rainbow: number; // 0 - 100  colour fringes at the edges
+  frost: number; // 0 - 12 (px) extra softness
+  light: number; // 0 - 100  brightness of the glass edge
 }
 
 export const GLASS_KEY = "fusion-glass";
@@ -35,6 +41,11 @@ export const GLASS_DEFAULT: GlassSettings = {
   preset: "balanced",
   ...GLASS_PRESETS.balanced,
   motion: true,
+  real: false,
+  refraction: 60,
+  rainbow: 30,
+  frost: 2,
+  light: 60,
 };
 
 const TINT_RGB: Record<GlassTint, string> = {
@@ -52,7 +63,24 @@ export function glassVars(s: GlassSettings) {
     fill: String(+(0.88 - (s.transparency / 100) * 0.8).toFixed(3)),
     rim: String(+(s.edge / 100).toFixed(2)),
     rgb: TINT_RGB[s.tint] ?? TINT_RGB.neutral,
+    frost: `${s.frost}px`,
+    light: String(+(s.light / 100).toFixed(2)),
   };
+}
+
+/** Real glass bends the picture with an SVG filter: only Chromium browsers can do that
+ *  (Chrome, Edge, Samsung Internet). Others keep the normal glass. */
+export function supportsRealGlass(): boolean {
+  if (typeof window === "undefined") return false;
+  const ua = navigator.userAgent;
+  const brands = (navigator as any).userAgentData?.brands as { brand: string }[] | undefined;
+  const chromium = brands
+    ? brands.some((b) => /chromium/i.test(b.brand))
+    : /Chrome\/|SamsungBrowser|EdgA\//.test(ua) && !/iPhone|iPad|iPod|Firefox/i.test(ua);
+  const blur =
+    typeof CSS !== "undefined" &&
+    (CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)"));
+  return chromium && blur;
 }
 
 export function loadGlass(): GlassSettings {
@@ -77,6 +105,8 @@ export function applyGlass(s: GlassSettings) {
   root.style.setProperty("--g-fill", v.fill);
   root.style.setProperty("--g-rim", v.rim);
   root.style.setProperty("--g-rgb", v.rgb);
+  root.style.setProperty("--g-frost", v.frost);
+  root.style.setProperty("--g-light", v.light);
 }
 
 export function saveGlass(s: GlassSettings) {
@@ -89,6 +119,7 @@ export function saveGlass(s: GlassSettings) {
 export function updateGlass(s: GlassSettings) {
   saveGlass(s);
   applyGlass(s);
+  window.dispatchEvent(new Event("fusion-glass-change"));
 }
 
 /**
@@ -97,5 +128,5 @@ export function updateGlass(s: GlassSettings) {
  */
 export const GLASS_BOOT_SCRIPT = `(function(){try{var s=JSON.parse(localStorage.getItem('${GLASS_KEY}')||'null');var d=document.documentElement;if(!s){d.setAttribute('data-glass','off');return;}
 d.setAttribute('data-glass',s.enabled?'on':'off');d.setAttribute('data-glass-motion',s.motion===false?'off':'on');
-if(s.css){d.style.setProperty('--g-blur',s.css.blur);d.style.setProperty('--g-sat',s.css.sat);d.style.setProperty('--g-fill',s.css.fill);d.style.setProperty('--g-rim',s.css.rim);d.style.setProperty('--g-rgb',s.css.rgb);}
+if(s.css){d.style.setProperty('--g-blur',s.css.blur);d.style.setProperty('--g-sat',s.css.sat);d.style.setProperty('--g-fill',s.css.fill);d.style.setProperty('--g-rim',s.css.rim);d.style.setProperty('--g-rgb',s.css.rgb);d.style.setProperty('--g-frost',s.css.frost||'2px');d.style.setProperty('--g-light',s.css.light||'0.6');}
 }catch(e){}})();`;
