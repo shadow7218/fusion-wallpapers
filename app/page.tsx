@@ -1845,7 +1845,7 @@ export default function FusionWallpapersApp() {
       heights[i] += h;
     }
     return (
-      <div className="flex items-start gap-1 -mx-2 md:gap-2 md:mx-0">
+      <div className="flex items-start gap-[9px] -mx-2 md:gap-2 md:mx-0">
         {cols.map((col, ci) => (
           <div key={ci} className="fusion-col flex-1 min-w-0 flex flex-col">
             {col.map((e) =>
@@ -1868,7 +1868,7 @@ export default function FusionWallpapersApp() {
       heights[i] += 1 / Math.max(r, 9 / 16) + 0.14;
     });
     return (
-      <div className="flex items-start gap-1 -mx-2 md:gap-2 md:mx-0">
+      <div className="flex items-start gap-[9px] -mx-2 md:gap-2 md:mx-0">
         {cols.map((col, ci) => (
           <div key={ci} className="flex-1 min-w-0 flex flex-col">
             {col.map((r, i) => (
@@ -1895,7 +1895,7 @@ export default function FusionWallpapersApp() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col pb-24 relative overflow-x-hidden font-sans transition-colors duration-200 ${
+      className={`min-h-screen flex flex-col pb-[calc(6rem+env(safe-area-inset-bottom))] relative overflow-x-clip font-sans transition-colors duration-200 ${
         isLight
           ? "theme-light bg-[#F4FEFF] text-[#0E2F76] selection:bg-[#0E2F76] selection:text-white"
           : "bg-[#000000] text-[#E5E4E2] selection:bg-white selection:text-black"
@@ -2770,7 +2770,7 @@ export default function FusionWallpapersApp() {
       {/* ================= SUBTLY CLEARER LIQUID GLASS BOTTOM NAVIGATION ================= */}
       <nav
         aria-label="Primary Bottom Navigation"
-        className="fixed bottom-3.5 left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
+        className="fixed bottom-[max(14px,calc(env(safe-area-inset-bottom)+6px))] left-1/2 -translate-x-1/2 z-40 w-[88%] max-w-xs"
       >
         <div
           className="fusion-nav relative rounded-full p-1.5"
