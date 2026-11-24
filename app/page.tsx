@@ -287,9 +287,6 @@ export default function FusionWallpapersApp() {
   const [authError, setAuthError] = useState<string | null>(null);
   const [authSuccessMsg, setAuthSuccessMsg] = useState<string | null>(null);
   const [resendCooldown, setResendCooldown] = useState<number>(0);
-  const [rememberMe, setRememberMe] = useState<boolean>(true);
-  const [passwordFocused, setPasswordFocused] = useState<boolean>(false);
-  const [resendingCode, setResendingCode] = useState<boolean>(false);
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] =
     useState<boolean>(false);
@@ -746,39 +743,18 @@ export default function FusionWallpapersApp() {
   const isValidEmail = (value: string) =>
     /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim());
 
-  const passwordRules = useMemo(
-    () => ({
-      length: authPassword.length >= 8,
-      number: /\d/.test(authPassword),
-      special: /[^A-Za-z0-9]/.test(authPassword),
-    }),
-    [authPassword]
-  );
-
-  const isPasswordStrong =
-    passwordRules.length && passwordRules.number && passwordRules.special;
-  const confirmTouched = authConfirmPassword.length > 0;
-  const passwordsMatch = confirmTouched && authPassword === authConfirmPassword;
-
-  const canSignIn =
-    isValidEmail(authEmail) && authPassword.length > 0 && !authLoading;
-  const canSignUp =
-    isValidEmail(authEmail) && isPasswordStrong && passwordsMatch && !authLoading;
-
   const handleSignInSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSignIn) return;
+    if (authLoading) return;
     setAuthError(null);
     setAuthSuccessMsg(null);
     const cleanEmail = authEmail.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail))
+      return setAuthError("Please enter a valid email address.");
 
     setAuthLoading(true);
     try {
-      const signedInUser = await db.signInWithPassword(
-        cleanEmail,
-        authPassword,
-        rememberMe
-      );
+      const signedInUser = await db.signInWithPassword(cleanEmail, authPassword);
       setIsAuthModalOpen(false);
       setAuthPassword("");
       if (signedInUser) await executePendingIntentAfterAuth(signedInUser);
@@ -791,17 +767,20 @@ export default function FusionWallpapersApp() {
 
   const handleSignUpSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!canSignUp) return;
+    if (authLoading) return;
     setAuthError(null);
     setAuthSuccessMsg(null);
     const cleanEmail = authEmail.trim().toLowerCase();
+    if (!isValidEmail(cleanEmail))
+      return setAuthError("Please enter a valid email address.");
+    if (authPassword.length < 6)
+      return setAuthError("Password must be at least 6 characters long.");
+    if (authPassword !== authConfirmPassword)
+      return setAuthError("Passwords do not match.");
 
     setAuthLoading(true);
     try {
-      const { user: newUser, signedIn } = await db.signUpWithPassword(
-        cleanEmail,
-        authPassword
-      );
+      const { user: newUser, signedIn } = await db.signUpWithPassword(cleanEmail, authPassword);
       if (signedIn && newUser) {
         const defaultName = cleanEmail.split("@")[0] || "Shadow";
         await db.saveProfileName(newUser.id, defaultName).catch(() => {});
@@ -855,8 +834,8 @@ export default function FusionWallpapersApp() {
     e.preventDefault();
     if (authLoading) return;
     setAuthError(null);
-    if (authPassword.length < 8)
-      return setAuthError("New password must be at least 8 characters long.");
+    if (authPassword.length < 6)
+      return setAuthError("New password must be at least 6 characters long.");
     if (authPassword !== authConfirmPassword)
       return setAuthError("Passwords do not match.");
 
@@ -914,17 +893,14 @@ export default function FusionWallpapersApp() {
   };
 
   const handleResendVerification = async () => {
-    if (authLoading || resendingCode || resendCooldown > 0) return;
+    if (authLoading || resendCooldown > 0) return;
     setAuthError(null);
-    setResendingCode(true);
     try {
       await db.resendVerificationCode(authEmail.trim().toLowerCase());
       setResendCooldown(60);
-      setAuthSuccessMsg("A new 6-digit code is on its way.");
+      setAuthSuccessMsg("A new code is on its way.");
     } catch (err: any) {
       setAuthError(formatAuthError(err));
-    } finally {
-      setResendingCode(false);
     }
   };
 
@@ -3202,7 +3178,7 @@ export default function FusionWallpapersApp() {
           style={{
             background: "rgba(10, 10, 14, 0.88)",
           }}
-          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5 max-h-[90dvh] overflow-y-auto overscroll-contain shadow-[0_25px_70px_rgba(0,0,0,0.95)]"
+          className="glass-container glass-container-rounded border-white/20 text-white sm:max-w-md p-5 shadow-[0_25px_70px_rgba(0,0,0,0.95)]"
         >
           <DialogHeader>
             <div className="mx-auto h-11 w-11 rounded-2xl overflow-hidden border border-white/20 mb-1">
@@ -3247,7 +3223,7 @@ export default function FusionWallpapersApp() {
                   setAuthError(null);
                   setAuthSuccessMsg(null);
                 }}
-                className={`py-2 rounded-full text-xs font-bold transition active:scale-95 ${
+                className={`py-1.5 rounded-full text-[11px] font-bold transition active:scale-95 ${
                   authStep === "SIGN_IN"
                     ? "glass-active-white"
                     : "text-white/75 hover:text-white"
@@ -3262,7 +3238,7 @@ export default function FusionWallpapersApp() {
                   setAuthError(null);
                   setAuthSuccessMsg(null);
                 }}
-                className={`py-2 rounded-full text-xs font-bold transition active:scale-95 ${
+                className={`py-1.5 rounded-full text-[11px] font-bold transition active:scale-95 ${
                   authStep === "SIGN_UP"
                     ? "glass-active-white"
                     : "text-white/75 hover:text-white"
@@ -3292,15 +3268,14 @@ export default function FusionWallpapersApp() {
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/50 absolute left-3.5 top-3.5" />
+                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
                   <Input
                     type="email"
-                    autoComplete="email"
                     required
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full"
+                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                   />
                 </div>
               </div>
@@ -3323,27 +3298,12 @@ export default function FusionWallpapersApp() {
                 </div>
                 <PasswordInput
                   required
-                  autoComplete="current-password"
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full"
+                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                 />
               </div>
-
-              {/* Remember Me */}
-              <label className="flex items-center gap-2.5 pt-0.5 cursor-pointer select-none w-fit">
-                <input
-                  type="checkbox"
-                  checked={rememberMe}
-                  onChange={(e) => setRememberMe(e.target.checked)}
-                  className="h-4 w-4 rounded border-white/30 bg-black/70 accent-white cursor-pointer"
-                />
-                <span className="text-xs text-white/85 font-medium">
-                  Remember Me
-                </span>
-              </label>
-
               {authError && (
                 <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
@@ -3353,14 +3313,11 @@ export default function FusionWallpapersApp() {
                 type="submit"
                 typeShape="pill"
                 activeWhite={true}
-                disabled={!canSignIn}
-                className="w-full h-11 text-xs font-extrabold mt-1 disabled:opacity-45 disabled:pointer-events-none"
+                disabled={authLoading}
+                className="w-full h-11 text-xs font-extrabold mt-1"
               >
                 {authLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Signing In...</span>
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
                   "Log In"
                 )}
@@ -3369,119 +3326,47 @@ export default function FusionWallpapersApp() {
           )}
 
           {authStep === "SIGN_UP" && (
-            <form onSubmit={handleSignUpSubmit} className="space-y-3 pt-1">
+            <form onSubmit={handleSignUpSubmit} className="space-y-2.5 pt-1">
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-white/90 block">
                   Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/50 absolute left-3.5 top-3.5" />
+                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
                   <Input
                     type="email"
-                    autoComplete="email"
                     required
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full"
+                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                   />
                 </div>
               </div>
-
-              <div
-                className="space-y-1.5"
-                onFocusCapture={() => setPasswordFocused(true)}
-              >
+              <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-white/90 block">
-                  Create Password
+                  Create Password (min. 6 chars)
                 </label>
                 <PasswordInput
                   required
-                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className={`bg-black/70 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full transition-colors ${
-                    authPassword.length > 0
-                      ? isPasswordStrong
-                        ? "border-emerald-500/80"
-                        : "border-white/25"
-                      : "border-white/20"
-                  }`}
+                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                 />
-
-                {/* Live Password Requirements */}
-                {(passwordFocused || authPassword.length > 0) && (
-                  <ul className="space-y-1 pt-1 px-1 text-[11px]">
-                    {[
-                      { met: passwordRules.length, label: "At least 8 characters" },
-                      { met: passwordRules.number, label: "Contains a number" },
-                      {
-                        met: passwordRules.special,
-                        label: "Contains a special character (!@#$...)",
-                      },
-                    ].map((rule) => (
-                      <li
-                        key={rule.label}
-                        className={`flex items-center gap-1.5 transition-colors ${
-                          rule.met
-                            ? "text-emerald-400"
-                            : authPassword.length > 0
-                            ? "text-red-400/90"
-                            : "text-white/50"
-                        }`}
-                      >
-                        {rule.met ? (
-                          <Check className="h-3.5 w-3.5 shrink-0" />
-                        ) : (
-                          <X className="h-3.5 w-3.5 shrink-0 opacity-75" />
-                        )}
-                        <span>{rule.label}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
-
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-white/90 block">
                   Confirm Password
                 </label>
                 <PasswordInput
                   required
-                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className={`bg-black/70 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full transition-colors ${
-                    confirmTouched
-                      ? passwordsMatch
-                        ? "border-emerald-500/80 focus-visible:ring-emerald-500/40"
-                        : "border-red-500/80 focus-visible:ring-red-500/40"
-                      : "border-white/20"
-                  }`}
+                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                 />
-                {confirmTouched && (
-                  <p
-                    className={`flex items-center gap-1 text-[11px] pt-0.5 px-1 font-medium ${
-                      passwordsMatch ? "text-emerald-400" : "text-red-400"
-                    }`}
-                  >
-                    {passwordsMatch ? (
-                      <>
-                        <Check className="h-3 w-3 shrink-0" />
-                        <span>Passwords match</span>
-                      </>
-                    ) : (
-                      <>
-                        <X className="h-3 w-3 shrink-0" />
-                        <span>Passwords do not match</span>
-                      </>
-                    )}
-                  </p>
-                )}
               </div>
-
               {authError && (
                 <p className="text-[11px] text-red-300 bg-red-950/60 p-2.5 rounded-xl border border-red-400/30">
                   {authError}
@@ -3491,16 +3376,13 @@ export default function FusionWallpapersApp() {
                 type="submit"
                 typeShape="pill"
                 activeWhite={true}
-                disabled={!canSignUp}
-                className="w-full h-11 text-xs font-extrabold mt-1 disabled:opacity-45 disabled:pointer-events-none"
+                disabled={authLoading}
+                className="w-full h-11 text-xs font-extrabold mt-1"
               >
                 {authLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Creating Account...</span>
-                  </>
+                  <Loader2 className="h-4 w-4 animate-spin" />
                 ) : (
-                  "Create Account"
+                  "Sign Up"
                 )}
               </GlassButton>
             </form>
@@ -3525,7 +3407,7 @@ export default function FusionWallpapersApp() {
                   placeholder="123456"
                   value={authCode}
                   onChange={(e) => setAuthCode(e.target.value.replace(/\s/g, ""))}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-12 text-center text-base tracking-[0.4em] w-full"
+                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-center text-base tracking-[0.4em] w-full"
                 />
               </div>
               {authError && (
@@ -3537,17 +3419,10 @@ export default function FusionWallpapersApp() {
                 type="submit"
                 typeShape="pill"
                 activeWhite={true}
-                disabled={authLoading || authCode.trim().length < 4}
-                className="w-full h-11 text-xs font-extrabold mt-1 disabled:opacity-45 disabled:pointer-events-none"
+                disabled={authLoading}
+                className="w-full h-11 text-xs font-extrabold mt-1"
               >
-                {authLoading ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Verifying...</span>
-                  </>
-                ) : (
-                  "Verify & Continue"
-                )}
+                {authLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Verify & Continue"}
               </GlassButton>
               <div className="flex items-center justify-between pt-1.5">
                 <button
@@ -3564,19 +3439,10 @@ export default function FusionWallpapersApp() {
                 <button
                   type="button"
                   onClick={handleResendVerification}
-                  disabled={resendCooldown > 0 || resendingCode}
-                  className="text-[11px] text-white/85 hover:text-white font-semibold disabled:opacity-50 inline-flex items-center gap-1.5"
+                  disabled={resendCooldown > 0}
+                  className="text-[11px] text-white/80 hover:text-white font-medium disabled:opacity-50"
                 >
-                  {resendingCode ? (
-                    <>
-                      <Loader2 className="h-3 w-3 animate-spin" />
-                      <span>Sending...</span>
-                    </>
-                  ) : resendCooldown > 0 ? (
-                    `Resend OTP in ${resendCooldown}s`
-                  ) : (
-                    "Resend OTP"
-                  )}
+                  {resendCooldown > 0 ? `Resend code in ${resendCooldown}s` : "Resend code"}
                 </button>
               </div>
             </form>
@@ -3592,15 +3458,14 @@ export default function FusionWallpapersApp() {
                   Account Email Address
                 </label>
                 <div className="relative">
-                  <Mail className="h-4 w-4 text-white/50 absolute left-3.5 top-3.5" />
+                  <Mail className="h-3.5 w-3.5 text-white/50 absolute left-3.5 top-3.5" />
                   <Input
                     type="email"
-                    autoComplete="email"
                     required
                     placeholder="you@example.com"
                     value={authEmail}
                     onChange={(e) => setAuthEmail(e.target.value)}
-                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-base sm:text-xs w-full"
+                    className="pl-10 bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-xs w-full"
                   />
                 </div>
               </div>
@@ -3613,10 +3478,8 @@ export default function FusionWallpapersApp() {
                 type="submit"
                 typeShape="pill"
                 activeWhite={true}
-                disabled={
-                  authLoading || resendCooldown > 0 || !isValidEmail(authEmail)
-                }
-                className="w-full h-11 text-xs font-extrabold mt-1 disabled:opacity-45 disabled:pointer-events-none"
+                disabled={authLoading || resendCooldown > 0}
+                className="w-full h-11 text-xs font-extrabold mt-1"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -3683,20 +3546,19 @@ export default function FusionWallpapersApp() {
                   placeholder="123456"
                   value={authCode}
                   onChange={(e) => setAuthCode(e.target.value.replace(/\s/g, ""))}
-                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-11 text-center tracking-[0.3em] text-base sm:text-sm w-full"
+                  className="bg-black/70 border-white/20 text-white placeholder:text-white/40 rounded-xl h-10 text-center tracking-[0.3em] text-sm w-full"
                 />
               </div>
               <div className="space-y-1">
                 <label className="text-[11px] font-semibold text-white/90 block">
-                  New Password (min. 8 chars)
+                  New Password (min. 6 chars)
                 </label>
                 <PasswordInput
                   required
-                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={authPassword}
                   onChange={(e) => setAuthPassword(e.target.value)}
-                  className="bg-black/70 border-white/20 text-white rounded-xl h-11 text-base sm:text-xs w-full"
+                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
                 />
               </div>
               <div className="space-y-1">
@@ -3705,17 +3567,10 @@ export default function FusionWallpapersApp() {
                 </label>
                 <PasswordInput
                   required
-                  autoComplete="new-password"
                   placeholder="••••••••"
                   value={authConfirmPassword}
                   onChange={(e) => setAuthConfirmPassword(e.target.value)}
-                  className={`bg-black/70 text-white rounded-xl h-11 text-base sm:text-xs w-full transition-colors ${
-                    confirmTouched
-                      ? passwordsMatch
-                        ? "border-emerald-500/80"
-                        : "border-red-500/80"
-                      : "border-white/20"
-                  }`}
+                  className="bg-black/70 border-white/20 text-white rounded-xl h-10 text-xs w-full"
                 />
               </div>
               {authError && (
@@ -3727,10 +3582,8 @@ export default function FusionWallpapersApp() {
                 type="submit"
                 typeShape="pill"
                 activeWhite={true}
-                disabled={
-                  authLoading || authCode.trim().length < 4 || !passwordsMatch
-                }
-                className="w-full h-11 text-xs font-extrabold mt-1 disabled:opacity-45 disabled:pointer-events-none"
+                disabled={authLoading}
+                className="w-full h-11 text-xs font-extrabold mt-1"
               >
                 {authLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
